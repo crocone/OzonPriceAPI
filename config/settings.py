@@ -18,14 +18,14 @@ class Settings(BaseSettings):
     OZON_API_URL: str = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
     MAX_ARTICLES_PER_REQUEST: int = 50
     
-    # Parser settings
-    MAX_RETRIES: int = 3
-    RETRY_DELAY: int = 3
-    REQUEST_TIMEOUT: int = 60
+    # Parser settings - оптимизировано для скорости
+    MAX_RETRIES: int = 2  # Уменьшено для скорости
+    RETRY_DELAY: int = 1  # Уменьшено для скорости
+    REQUEST_TIMEOUT: int = 30  # Уменьшено для скорости
     
-    # Worker settings
-    MAX_ARTICLES_PER_WORKER: int = 10
-    MAX_WORKERS: int = 5
+    # Worker settings - динамическое распределение
+    MAX_ARTICLES_PER_WORKER: int = 50  # Увеличено
+    MAX_WORKERS: int = 15  # Увеличено до 15
     
     # Browser settings
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"

@@ -78,9 +78,11 @@ class SeleniumManager:
             logger.info(f"Navigating to: {url}")
             self.driver.get(url)
             
-            time.sleep(random.uniform(1.0, 2.0))
+            # Минимальная задержка для API
+            time.sleep(random.uniform(0.3, 0.8))
             
-            if self.is_blocked():
+            # Быстрая проверка блокировки только по заголовку
+            if "Access denied" in self.driver.title or "Cloudflare" in self.driver.title:
                 logger.warning("Detected anti-bot protection")
                 return False
             

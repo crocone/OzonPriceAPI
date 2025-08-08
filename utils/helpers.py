@@ -35,15 +35,10 @@ def parse_price_data(price_json_str: str) -> Optional[PriceInfo]:
 
 
 def find_web_price_property(widget_states: Dict[str, Any]) -> Optional[str]:
-    web_price_keys = [key for key in widget_states.keys() if key.startswith('webPrice')]
-    logger.info(f"Found webPrice keys: {web_price_keys}")
-    
+    # Быстрый поиск без логирования
     for key, value in widget_states.items():
         if key.startswith('webPrice-') and isinstance(value, str):
-            logger.info(f"Found webPrice property: {key}")
             return value
-    
-    logger.warning("No webPrice property found")
     return None
 
 
