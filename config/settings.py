@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     API_DEBUG: bool = True
     
     # Selenium settings
-    HEADLESS: bool = True
+    HEADLESS: bool = False
     IMPLICIT_WAIT: int = 20
     PAGE_LOAD_TIMEOUT: int = 60
     
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     
     # Parser settings
     MAX_RETRIES: int = 3
-    RETRY_DELAY: int = 10
+    RETRY_DELAY: int = 3
     REQUEST_TIMEOUT: int = 60
     
     # Worker settings

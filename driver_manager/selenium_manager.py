@@ -11,7 +11,8 @@ from config.settings import settings
 from typing import Optional
 import time
 import json
-
+import random
+import undetected_chromedriver as uc
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,11 @@ class SeleniumManager:
     def __init__(self):
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
-    
-    def setup_driver(self) -> webdriver.Chrome:
-        """
-        Setup Chrome driver with stealth configuration
-        """
+
+
+    def setup_driver(self) -> uc.Chrome:
         chrome_options = Options()
-        
-        # Rotate user agents
-        import random
+
         user_agents = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0",
@@ -36,73 +33,49 @@ class SeleniumManager:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
         ]
         chrome_options.add_argument(f"--user-agent={random.choice(user_agents)}")
-        
-        # Basic options
+
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("--allow-running-insecure-content")
         chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-        
-        # Add cookies to bypass some protections
         chrome_options.add_argument("--disable-features=BlockInsecurePrivateNetworkRequests")
-        
+
+
         # Performance options
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
-        chrome_options.add_argument("--disable-images")
-        # ВАЖНО: НЕ отключаем JavaScript!
-        # chrome_options.add_argument("--disable-javascript")  # Закомментировано!
-        
-        # Headless mode
-        if settings.HEADLESS:
-            chrome_options.add_argument("--headless=new")
-        
-        # Window size
+        chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+
         chrome_options.add_argument("--window-size=1920,1080")
-        
+
         try:
-            # Используем selenium-manager для автоматического управления драйверами
-            from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
-            
-            service = Service()
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            
-            # Apply stealth
-            stealth(driver,
-                   languages=["en-US", "en"],
-                   vendor="Google Inc.",
-                   platform="Win32",
-                   webgl_vendor="Intel Inc.",
-                   renderer="Intel Iris OpenGL Engine",
-                   fix_hairline=True,
-                )
-            
-            # Set timeouts
+            driver = uc.Chrome(
+                options=chrome_options,
+                version_main=138,
+                headless=False
+            )
+
             driver.implicitly_wait(settings.IMPLICIT_WAIT)
             driver.set_page_load_timeout(settings.PAGE_LOAD_TIMEOUT)
-            
-            # Execute script to hide automation
-            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
+
+            driver.execute_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
+
             self.driver = driver
             self.wait = WebDriverWait(driver, settings.IMPLICIT_WAIT)
-            
-            logger.info("Chrome driver setup successfully")
+
+            logger.info("Undetected Chrome driver setup successfully")
             return driver
-            
+
         except WebDriverException as e:
-            logger.error(f"Failed to setup Chrome driver: {e}")
+            logger.error(f"Failed to setup undetected Chrome driver: {e}")
             raise
+
     
     def navigate_to_url(self, url: str) -> bool:
-        """
-        Navigate to URL with error handling
-        """
         if not self.driver:
             logger.error("Driver not initialized")
             return False
@@ -111,22 +84,8 @@ class SeleniumManager:
             logger.info(f"Navigating to: {url}")
             self.driver.get(url)
             
-            # Имитация поведения человека
-            import random
-            time.sleep(random.uniform(2.0, 5.0))
+            time.sleep(random.uniform(1.0, 2.0))
             
-            # Имитация скроллинга
-            try:
-                scroll_height = self.driver.execute_script("return document.body.scrollHeight")
-                for i in range(1, 5):
-                    self.driver.execute_script(f"window.scrollTo(0, {scroll_height * i / 5});")
-                    time.sleep(random.uniform(0.3, 0.7))
-                self.driver.execute_script("window.scrollTo(0, 0);")
-                time.sleep(random.uniform(0.5, 1.0))
-            except Exception as e:
-                logger.debug(f"Error during scrolling: {e}")
-            
-            # Check if we got blocked
             if self.is_blocked():
                 logger.warning("Detected anti-bot protection")
                 return False
@@ -169,46 +128,29 @@ class SeleniumManager:
             return True
     
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
-        """
-        Wait for JSON response with improved logic
-        """
         if not self.driver:
             return None
             
         try:
-            logger.info("Waiting for JSON response...")
             start_time = time.time()
             
-            # Сначала ждем загрузки страницы
             WebDriverWait(self.driver, 10).until(
                 lambda driver: driver.execute_script("return document.readyState") == "complete"
             )
             
-            # Теперь ждем появления JSON данных
             while time.time() - start_time < timeout:
                 try:
                     page_source = self.driver.page_source
-                    
-                    # Извлекаем JSON из HTML обертки
                     json_content = self.extract_json_from_html(page_source)
                     
                     if json_content:
                         try:
-                            # Проверяем, что JSON валидный
                             data = json.loads(json_content)
-                            
-                            # Проверяем наличие widgetStates
                             if 'widgetStates' in data:
                                 logger.info("JSON response with widgetStates found")
                                 return json_content
-                            
                         except json.JSONDecodeError:
-                            # Это не валидный JSON, продолжаем ждать
                             pass
-                    
-                    # Логируем первые несколько попыток для отладки
-                    if time.time() - start_time < 5:
-                        logger.debug(f"Page content preview: {page_source[:200]}...")
                     
                     time.sleep(0.5)
                     
@@ -218,7 +160,6 @@ class SeleniumManager:
                     continue
             
             logger.warning(f"Timeout waiting for JSON response after {timeout} seconds")
-            # Возвращаем последний извлеченный JSON для отладки
             return self.extract_json_from_html(self.driver.page_source)
             
         except Exception as e:
@@ -226,14 +167,9 @@ class SeleniumManager:
             return None
     
     def extract_json_from_html(self, html_content: str) -> Optional[str]:
-        """
-        Extract JSON from HTML wrapper (from <pre> tag)
-        """
         try:
-            # Ищем содержимое между <pre> тегами
             import re
             
-            # Паттерн для поиска JSON в <pre> теге
             pre_pattern = r'<pre[^>]*>(.*?)</pre>'
             pre_match = re.search(pre_pattern, html_content, re.DOTALL | re.IGNORECASE)
             

@@ -1,276 +1,246 @@
-# Ozon Price Parser API
+# Ozon Price Parser API с ngrok
 
-FastAPI-based API for parsing product prices from Ozon using Selenium with stealth mode.
+API для парсинга цен товаров с сайта Ozon.ru с автоматическим созданием публичного туннеля через ngrok.
 
-## Features
+## 🚀 Особенности
 
-- 🚀 Fast and efficient price parsing
-- 🛡️ Anti-bot protection bypass using selenium-stealth
-- 📊 Batch processing up to 50 articles per request
-- 🔄 Automatic retry mechanism
-- 📝 Comprehensive logging
-- 🏗️ Modular and scalable architecture
-- 🐳 Docker support
+- **FastAPI** - современный, быстрый веб-фреймворк
+- **ngrok интеграция** - автоматическое создание публичного туннеля
+- **undetected-chromedriver** - обход антибот защиты
+- **Прямое обращение к API** - сначала идем на JSON эндпоинт, потом fallback на HTML
+- **Автоматическое открытие документации** в браузере
+- **Тестовые файлы** для проверки функционала
 
-## Project Structure
+## 📦 Установка
 
-```
-ozon-parser-api/
-├── config/
-│   └── settings.py          # Application settings
-├── models/
-│   └── schemas.py           # Pydantic models
-├── utils/
-│   └── helpers.py           # Utility functions
-├── driver_manager/
-│   └── selenium_manager.py  # Selenium WebDriver management
-├── parser/
-│   └── ozon_parser.py       # Main parsing logic
-├── routes/
-│   └── parser_routes.py     # FastAPI routes
-├── main.py                  # Application entry point
-├── run.py                   # Setup and run script
-├── requirements.txt         # Python dependencies
-├── .env                     # Environment variables
-├── Dockerfile              # Docker configuration
-└── README.md               # This file
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Chrome browser
-- ChromeDriver (matching your Chrome version)
-
-### Installation
-
-1. **Clone the repository:**
-```bash
-git clone <repository-url>
-cd ozon-parser-api
-```
-
-2. **Install dependencies:**
+1. Клонируйте репозиторий
+2. Установите зависимости:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Set up environment variables:**
-```bash
-cp .env.example .env
-# Edit .env file with your settings
-```
+3. Настройте ngrok:
+   - Зарегистрируйтесь на https://ngrok.com
+   - Получите authtoken
+   - Выполните: `ngrok config add-authtoken <ваш_токен>`
 
-4. **Run the application:**
-```bash
-python run.py
-```
+## 🎯 Запуск
 
-Or manually:
-```bash
-python main.py
-```
-
-### Docker Setup
+⚠️ **ВАЖНО: Сначала активируйте виртуальное окружение!**
 
 ```bash
-# Build image
-docker build -t ozon-parser-api .
+# Windows
+venv\Scripts\activate
 
-# Run container
-docker run -p 8000:8000 ozon-parser-api
+# Linux/Mac  
+source venv/bin/activate
+
+# Затем запускайте сервер
+(venv) python main.py
 ```
 
-## API Usage
+При запуске:
+- ✅ Запускается FastAPI сервер на порту 8000
+- ✅ Создается ngrok туннель (https://xxx.ngrok.io)
+- ✅ Автоматически открывается документация API в браузере
+- ✅ Выводится публичная ссылка в консоль
 
-### Health Check
+## 📋 Тестирование
+
+### 1. Тестирование API через HTTP запросы
+
+⚠️ **Активируйте venv перед тестированием!**
 
 ```bash
-curl http://localhost:8000/api/v1/health
+# Windows
+venv\Scripts\activate
+(venv) python test_api.py https://your-ngrok-url.ngrok.io
+
+# Linux/Mac
+source venv/bin/activate
+(venv) python test_api.py https://your-ngrok-url.ngrok.io
 ```
 
-### Parse Prices
+Этот скрипт протестирует:
+- ✅ Доступность API
+- ✅ Парсинг артикула 158761892
+- ✅ Парсинг артикула 2278238527
+- ✅ Множественный парсинг обоих артикулов
+- ✅ Генерацию curl примеров
+
+### 2. Тестирование undetected-chromedriver
+
+⚠️ **Активируйте venv перед тестированием!**
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/get_price" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "articles": [2360879218, 859220077, 2430448285, 2392842054, 1774818716]
-  }'
+# Windows
+venv\Scripts\activate
+(venv) python test_undetected_chrome.py
+
+# Linux/Mac
+source venv/bin/activate
+(venv) python test_undetected_chrome.py
 ```
 
-### Response Format
+Этот скрипт протестирует:
+- ✅ Инициализацию undetected-chromedriver
+- ✅ Базовую навигацию по Ozon
+- ✅ Загрузку страниц тестовых товаров
+- ✅ Работу с API эндпоинтами
+- ✅ Создание скриншотов для анализа
+
+## 🌐 Примеры curl запросов
+
+### Проверка доступности API
+```bash
+curl -X GET "https://your-ngrok-url.ngrok.io/"
+```
+
+### Парсинг одного артикула (158761892)
+```bash
+curl -X POST "https://your-ngrok-url.ngrok.io/api/v1/get_price" \
+     -H "Content-Type: application/json" \
+     -d '{"articles": [158761892]}'
+```
+
+### Парсинг двух артикулов (158761892 и 2278238527)
+```bash
+curl -X POST "https://your-ngrok-url.ngrok.io/api/v1/get_price" \
+     -H "Content-Type: application/json" \
+     -d '{"articles": [158761892, 2278238527]}'
+```
+
+### Проверка здоровья API
+```bash
+curl -X GET "https://your-ngrok-url.ngrok.io/api/v1/health"
+```
+
+### Получение документации API
+```bash
+curl -X GET "https://your-ngrok-url.ngrok.io/docs"
+```
+
+## 📊 Структура ответа API
 
 ```json
 {
-  "success": true,
-  "total_articles": 5,
-  "parsed_articles": 4,
   "results": [
     {
-      "article": 2360879218,
+      "article": 158761892,
       "success": true,
+      "isAvailable": true,
+      "title": "Название товара",
       "price_info": {
-        "isAvailable": true,
-        "cardPrice": 55325,
-        "price": 61472,
-        "originalPrice": 79227
+        "cardPrice": 1299,
+        "price": 1499,
+        "originalPrice": 1999
       },
-      "error": null
-    },
-    {
-      "article": 859220077,
-      "success": false,
-      "price_info": null,
-      "error": "Failed to extract price info"
+      "seller": {
+        "name": "Название продавца"
+      }
     }
   ],
-  "errors": ["Failed to extract price info"]
+  "total": 1,
+  "successful": 1,
+  "failed": 0
 }
 ```
 
-## Configuration
+## ⚙️ Конфигурация
 
-### Environment Variables
+Настройки находятся в файле `config/settings.py`:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_HOST` | API host address | `0.0.0.0` |
-| `API_PORT` | API port | `8000` |
-| `API_DEBUG` | Debug mode | `true` |
-| `HEADLESS` | Run browser in headless mode | `false` |
-| `MAX_ARTICLES_PER_REQUEST` | Maximum articles per request | `50` |
-| `MAX_RETRIES` | Maximum retry attempts | `3` |
-| `RETRY_DELAY` | Delay between retries (seconds) | `2` |
+- `API_HOST` - хост API (по умолчанию: "0.0.0.0")
+- `API_PORT` - порт API (по умолчанию: 8000)
+- `HEADLESS` - режим браузера без GUI
+- `MAX_ARTICLES_PER_REQUEST` - максимум артикулов за запрос
+- `MAX_RETRIES` - количество повторных попыток
 
-### Settings
+## 🔧 Отладка
 
-You can modify settings in `config/settings.py` or use environment variables.
+1. **Проблемы с ngrok**: Убедитесь, что authtoken настроен корректно
+2. **Проблемы с Chrome**: Убедитесь, что Chrome установлен в системе
+3. **Блокировка Ozon**: Используйте VPN или измените User-Agent
 
-## API Endpoints
+## 📝 Логи
 
-### `POST /api/v1/get_price`
+Все операции логируются в консоль с детальной информацией:
+- Запуск ngrok туннеля
+- Навигация по страницам
+- Извлечение данных
+- Ошибки и предупреждения
 
-Parse prices for given articles.
+## 🛠️ Технологии
 
-**Request Body:**
-```json
-{
-  "articles": [123456789, 987654321]
-}
+- **FastAPI** - веб-фреймворк
+- **Selenium** - автоматизация браузера  
+- **undetected-chromedriver** - обход детекции
+- **pyngrok** - создание туннелей
+- **Pydantic** - валидация данных
+- **uvicorn** - ASGI сервер
+
+## 📁 Структура проекта
+
+```
+ozon-parser-api/
+├── config/
+│   └── settings.py          # Настройки приложения
+├── models/
+│   └── schemas.py           # Pydantic модели
+├── utils/
+│   └── helpers.py           # Вспомогательные функции
+├── driver_manager/
+│   └── selenium_manager.py  # Управление WebDriver
+├── parser/
+│   └── ozon_parser.py       # Основная логика парсинга
+├── routes/
+│   └── parser_routes.py     # FastAPI маршруты
+├── main.py                  # Точка входа с ngrok
+├── test_api.py              # Тестирование API
+├── test_undetected_chrome.py # Тестирование Chrome
+├── requirements.txt         # Python зависимости
+└── README.md               # Этот файл
 ```
 
-**Response:**
-- `success`: Overall success status
-- `total_articles`: Total number of articles requested
-- `parsed_articles`: Number of successfully parsed articles
-- `results`: Array of parsing results for each article
-- `errors`: List of error messages
+## 🚀 Быстрый старт
 
-### `GET /api/v1/health`
+⚠️ **КРИТИЧНО: Всегда активируйте venv перед любыми действиями!**
 
-Health check endpoint.
-
-### `POST /api/v1/restart_parser`
-
-Restart the parser instance (useful for debugging).
-
-## How It Works
-
-1. **Request Processing**: API receives article numbers in POST request
-2. **URL Construction**: Builds Ozon API URLs for each article
-3. **Stealth Navigation**: Uses selenium-stealth to bypass anti-bot protection
-4. **JSON Extraction**: Waits for and captures JSON response from Ozon API
-5. **Price Parsing**: Extracts price information from `widgetStates.webPrice-*` properties
-6. **Response Formation**: Returns structured response with all results
-
-## Anti-Bot Protection
-
-The parser uses several techniques to bypass Ozon's anti-bot protection:
-
-- **Selenium Stealth**: Hides automation indicators
-- **User Agent Spoofing**: Uses realistic browser user agents
-- **Request Timing**: Implements delays between requests
-- **Error Handling**: Detects and handles blocking scenarios
-
-## Performance
-
-- **Target Time**: 3-5 seconds per article
-- **Batch Processing**: Up to 50 articles per request
-- **Retry Logic**: Automatic retry on failures
-- **Resource Management**: Proper cleanup of browser instances
-
-## Logging
-
-The application provides comprehensive logging:
-
-- Request/response logging
-- Parsing progress tracking
-- Error reporting
-- Performance metrics
-
-## Development
-
-### Adding New Features
-
-1. **Parser Extensions**: Modify `parser/ozon_parser.py`
-2. **New Endpoints**: Add routes to `routes/parser_routes.py`
-3. **Configuration**: Update `config/settings.py`
-4. **Models**: Add new schemas to `models/schemas.py`
-
-### Testing
-
+1. **Активируйте виртуальное окружение:**
 ```bash
-# Test with sample data
-curl -X POST "http://localhost:8000/api/v1/get_price" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "articles": [2360879218]
-  }'
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
 ```
 
-## Future Enhancements
+2. **Установите зависимости:**
+```bash
+(venv) pip install -r requirements.txt
+```
 
-- [x] Multiple worker support
-- [ ] Connection pooling
-- [ ] Caching mechanism
-- [ ] Rate limiting
-- [ ] Monitoring and metrics
-- [ ] Database integration
-- [ ] Authentication
+3. **Настройте ngrok authtoken:**
+```bash
+ngrok config add-authtoken <your_token>
+```
 
-## Troubleshooting
+4. **Запустите приложение:**
+```bash
+(venv) python main.py
+```
 
-### Common Issues
+5. **Тестируйте API (в новом терминале):**
+```bash
+# Снова активируйте venv!
+venv\Scripts\activate
+(venv) python test_api.py https://your-ngrok-url.ngrok.io
+```
 
-1. **ChromeDriver not found**
-   - Download ChromeDriver matching your Chrome version
-   - Add to PATH or place in project directory
+## 📞 Поддержка
 
-2. **Anti-bot detection**
-   - Check if IP is blocked
-   - Adjust delay settings
-   - Verify stealth configuration
-
-3. **JSON parsing errors**
-   - Check if Ozon API structure changed
-   - Verify response format
-   - Update parsing logic if needed
-
-### Debug Mode
-
-Set `HEADLESS=false` in `.env` to see browser actions in real-time.
-
-## License
-
-MIT License
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+При возникновении проблем:
+1. Проверьте логи в консоли
+2. Убедитесь, что ngrok настроен корректно
+3. Проверьте доступность Chrome браузера
+4. Используйте тестовые скрипты для диагностики

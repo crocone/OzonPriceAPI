@@ -1,10 +1,13 @@
 import logging
 import uvicorn
+import webbrowser
+import threading
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routes.parser_routes import router as parser_router
 from config.settings import settings
+from pyngrok import ngrok
 import time
 
 
@@ -72,6 +75,44 @@ async def root():
     }
 
 
+def start_ngrok_tunnel():
+    """
+    Запускает ngrok туннель и возвращает публичную ссылку
+    """
+    try:
+        # Создаем туннель на порт 8000
+        public_url = ngrok.connect(8000)
+        logger.info("="*60)
+        logger.info("� NGPROK ТУННЕЛЬ УСПЕШНО ЗАПУЩЕН!")
+        logger.info("="*60)
+        logger.info(f"🌐 Публичный URL: {public_url}")
+        logger.info(f"📖 API документация: {public_url}/docs")
+        logger.info(f"🔧 Swagger UI: {public_url}/docs")
+        logger.info(f"📚 ReDoc: {public_url}/redoc")
+        logger.info("="*60)
+        logger.info("📋 Примеры curl запросов:")
+        logger.info(f"   curl -X GET \"{public_url}/\"")
+        logger.info(f"   curl -X GET \"{public_url}/api/v1/health\"")
+        logger.info(f"   curl -X POST \"{public_url}/api/v1/get_price\" -H \"Content-Type: application/json\" -d '{{\"articles\": [158761892]}}'")
+        logger.info("="*60)
+        
+        # Автоматически открываем документацию в браузере
+        try:
+            webbrowser.open(f"{public_url}/docs")
+            logger.info("🌐 Документация API открыта в браузере")
+        except Exception as browser_error:
+            logger.warning(f"Не удалось открыть браузер: {browser_error}")
+        
+        return public_url
+    except Exception as e:
+        logger.error(f"❌ Ошибка запуска ngrok: {e}")
+        logger.error("Убедитесь, что:")
+        logger.error("1. ngrok установлен и доступен в PATH")
+        logger.error("2. authtoken настроен: ngrok config add-authtoken <your_token>")
+        logger.error("3. Порт 8000 не занят другим процессом")
+        return None
+
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
@@ -84,6 +125,13 @@ async def startup_event():
 async def shutdown_event():
     logger.info("Shutting down Ozon Price Parser API...")
     
+    # Отключаем ngrok туннель
+    try:
+        ngrok.disconnect_all()
+        logger.info("ngrok туннель отключен")
+    except Exception as e:
+        logger.warning(f"Ошибка отключения ngrok: {e}")
+    
     # Clean up parser instance
     from routes.parser_routes import parser_instance
     if parser_instance:
@@ -91,10 +139,38 @@ async def shutdown_event():
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
-        reload=settings.API_DEBUG,
-        log_level="info"
-    )
+    logger.info("🚀 Запуск Ozon Parser API с ngrok интеграцией...")
+    
+    # Запускаем ngrok туннель
+    public_url = start_ngrok_tunnel()
+    
+    if not public_url:
+        logger.error("❌ Не удалось запустить ngrok туннель. Запуск только локального сервера...")
+        logger.info("🌐 Локальный сервер будет доступен по адресу: http://localhost:8000")
+    
+    # Небольшая задержка для инициализации ngrok
+    time.sleep(2)
+    
+    try:
+        # Запускаем FastAPI сервер на порту 8000
+        logger.info("🔥 Запуск FastAPI сервера...")
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=False,  # Отключаем reload для стабильности с ngrok
+            log_level="info"
+        )
+    except KeyboardInterrupt:
+        logger.info("🛑 Получен сигнал остановки...")
+    except Exception as e:
+        logger.error(f"❌ Ошибка запуска сервера: {e}")
+    finally:
+        # Отключаем ngrok при завершении
+        try:
+            ngrok.disconnect_all()
+            logger.info("🔌 ngrok туннель отключен")
+        except Exception as e:
+            logger.warning(f"⚠️  Ошибка отключения ngrok: {e}")
+        
+        logger.info("👋 Сервер остановлен")
