@@ -23,57 +23,51 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
 
 
-    def setup_driver(self) -> uc.Chrome:
+    def setup_driver(self) -> webdriver.Chrome:
         chrome_options = Options()
-
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
-        ]
-        chrome_options.add_argument(f"--user-agent={random.choice(user_agents)}")
-
+        
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_argument("--disable-web-security")
-        chrome_options.add_argument("--allow-running-insecure-content")
-        chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-        chrome_options.add_argument("--disable-features=BlockInsecurePrivateNetworkRequests")
-
-
-        # Performance options
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
-        chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-
+        
+        if settings.HEADLESS:
+            chrome_options.add_argument("--headless")
+        
         chrome_options.add_argument("--window-size=1920,1080")
-
+        
         try:
-            driver = uc.Chrome(
-                options=chrome_options,
-                version_main=138,
-                headless=False
-            )
+            driver = webdriver.Chrome(options=chrome_options)
+            
 
-            driver.implicitly_wait(settings.IMPLICIT_WAIT)
-            driver.set_page_load_timeout(settings.PAGE_LOAD_TIMEOUT)
+            stealth(driver,
+                   languages=["ru-RU", "ru"],
+                   vendor="Google Inc.",
+                   platform="Win32",
+                   webgl_vendor="Intel Inc.",
+                   renderer="Intel Iris OpenGL Engine",
+                   fix_hairline=True)
+            
 
-            driver.execute_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
+            driver.implicitly_wait(20)
+            driver.set_page_load_timeout(60)
+            
 
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
             self.driver = driver
-            self.wait = WebDriverWait(driver, settings.IMPLICIT_WAIT)
-
-            logger.info("Undetected Chrome driver setup successfully")
+            self.wait = WebDriverWait(driver, 20)
+            
+            logger.info("Chrome драйвер создан успешно")
             return driver
-
+            
         except WebDriverException as e:
-            logger.error(f"Failed to setup undetected Chrome driver: {e}")
+            logger.error(f"Ошибка создания Chrome драйвера: {e}")
             raise
-
     
     def navigate_to_url(self, url: str) -> bool:
         if not self.driver:
