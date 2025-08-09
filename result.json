@@ -1,17 +1,17 @@
 {
   "success": true,
-  "total_articles": 2,
-  "parsed_articles": 2,
+  "total_articles": 47,
+  "parsed_articles": 42,
   "results": [
     {
       "article": 2360879218,
       "success": true,
       "isAvailable": true,
-      "title": "TREIDCOMPUTERS Системный блок J9 (Intel Core i5-13400F, RAM 32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 4060 (8 Гб), Windows), черный",
+      "title": "TREIDCOMPUTERS Системный блок J9 (Intel Core i5-13400F, RAM32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 4060 (8 Гб), Windows), черный",
       "seller": { "name": "TREIDCOMPUTERS" },
       "price_info": {
-        "cardPrice": 74509,
-        "price": 82788,
+        "cardPrice": 73465,
+        "price": 80312,
         "originalPrice": 359970
       },
       "error": null
@@ -23,12 +23,235 @@
       "title": "Компьютерс 24\" Компьютер в сборке Для игр и учебы с монитором 24\" (Intel Xeon E5-2650V2, RAM 16 ГБ, SSD 512 ГБ, AMD Radeon RX 580 (8 Гб), Windows), черный, Русская раскладка",
       "seller": { "name": "КомпьютерS" },
       "price_info": {
-        "cardPrice": 42651,
-        "price": 47390,
-        "originalPrice": 120800
+        "cardPrice": 49608,
+        "price": 54232,
+        "originalPrice": 120908
+      },
+      "error": null
+    },
+    {
+      "article": 2430448285,
+      "success": true,
+      "isAvailable": true,
+      "title": "TREIDCOMPUTERS Системный блок (Intel Core i7-12700F, RAM 32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 5060 (8 Гб), Windows), белый",
+      "seller": { "name": "TREIDCOMPUTERS" },
+      "price_info": {
+        "cardPrice": 86081,
+        "price": 95646,
+        "originalPrice": 459000
+      },
+      "error": null
+    },
+    {
+      "article": 2392842054,
+      "success": true,
+      "isAvailable": true,
+      "title": "AMD Системный блок Игровой компьютер (AMDRyzen 5 3600, RAM 32 ГБ, SSD 1024 ГБ, NVIDIA GeForce RTX 2060 SUPER (8 Гб), Windows 10 Pro), черный",
+      "seller": { "name": "JetGame" },
+      "price_info": {
+        "cardPrice": 48264,
+        "price": 52762,
+        "originalPrice": 115000
+      },
+      "error": null
+    },
+    {
+      "article": 1774818716,
+      "success": true,
+      "isAvailable": true,
+      "title": "Системный блок Игровой компьютер  (AMD Ryzen 5 5600, RAM 16 ГБ, SSD 512 ГБ, NVIDIA GeForce RTX 3060 (12 Гб), Windows 10 Pro), черный матовый",
+      "seller": { "name": "ДомЛюкс" },
+      "price_info": {
+        "cardPrice": 57076,
+        "price": 62396,
+        "originalPrice": 82911
+      },
+      "error": null
+    },
+    {
+      "article": 1649767704,
+      "success": true,
+      "isAvailable": true,
+      "title": "JetGame Системный блок Игровой компьютер (Intel Xeon E5-2650V2, RAM 64 ГБ, SSD 1024 ГБ, NVIDIA GeForce RTX 3060 (12 Гб), Windows 10 Pro), черный",
+      "seller": { "name": "JetGame" },
+      "price_info": {
+        "cardPrice": 52156,
+        "price": 57017,
+        "originalPrice": 85000
+      },
+      "error": null
+    },
+    {
+      "article": 2433082108,
+      "success": true,
+      "isAvailable": true,
+      "title": "TREIDCOMPUTERS Системный блок Pulse (Intel Core i5-14400F, RAM 32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 5060 (8 Гб), Windows), белый",
+      "seller": { "name": "TREIDCOMPUTERS" },
+      "price_info": {
+        "cardPrice": 76198,
+        "price": 83300,
+        "originalPrice": 350000
+      },
+      "error": null
+    },
+    {
+      "article": 1372069683,
+      "success": true,
+      "isAvailable": true,
+      "title": "Intel Системный блок (Intel Core i5-2400, RAM 16 ГБ, SSD 480 ГБ, NVIDIA GeForce GT 730 (4 Гб), Windows 10 Pro), черный",
+      "seller": { "name": "relotech" },
+      "price_info": {
+        "cardPrice": 19487,
+        "price": 21381,
+        "originalPrice": 49999
+      },
+      "error": null
+    },
+    {
+      "article": 2360879218,
+      "success": true,
+      "isAvailable": true,
+      "title": "TREIDCOMPUTERS Системный блок J9 (Intel Core i5-13400F, RAM 32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 4060 (8 Гб), Windows), черный",
+      "seller": { "name": "TREIDCOMPUTERS" },
+      "price_info": {
+        "cardPrice": 73465,
+        "price": 80312,
+        "originalPrice": 359970
+      },
+      "error": null
+    },
+    {
+      "article": 859220077,
+      "success": true,
+      "isAvailable": true,
+      "title": "Компьютерс 24\" Компьютер в сборке Для игр и учебы с монитором 24\" (Intel XeE5-2650V2, RAM 16 ГБ, SSD 512 ГБ, AMD Radeon RX 580 (8 Гб), Windows), черный, Русская раскладка",
+      "seller": { "name": "КомпьютерS" },
+      "price_info": {
+        "cardPrice": 49608,
+        "price": 54232,
+        "originalPrice": 120908
+      },
+      "error": null
+    },
+    {
+      "article": 2430448285,
+      "success": true,
+      "isAvailable": true,
+      "title": "TREIDCOMPUTERS Системный блок (Intel Core i7-12700F, RAM 32 ГБ, SSD 960ГБ, NVIDIA GeForce RTX 5060 (8 Гб), Windows), белый",
+      "seller": { "name": "TREIDCOMPUTERS" },
+      "price_info": {
+        "cardPrice": 86081,
+        "price": 95646,
+        "originalPrice": 459000
+      },
+      "error": null
+    },
+    {
+      "article": 2392842054,
+      "success": true,
+      "isAvailable": true,
+      "title": "AMD Системный блок Игровой компьютер (AMD Ryzen 5 3600, RAM 32 ГБ, SSD 1024 ГБ, NVIDIA GeForce RTX 2060 SUPER (8 Гб), Windows 10 Pro), черный",
+      "seller": { "name": "JetGame" },
+      "price_info": {
+        "cardPrice": 48264,
+        "price": 52762,
+        "originalPrice": 115000
+      },
+      "error": null
+    },
+    {
+      "article": 1774818716,
+      "success": true,
+      "isAvailable": true,
+      "title": "Системный блок Игровой компьютер  (AMD Ryzen 5 5600, RAM 16 ГБ, SSD 512 ГБ, NVIDIA GeForce RTX 3060 (12 Гб), Windows 10 Pro), черный матовый",
+      "seller": { "name": "ДомЛюкс" },
+      "price_info": {
+        "cardPrice": 57076,
+        "price": 62396,
+        "originalPrice": 82911
+      },
+      "error": null
+    },
+    {
+      "article": 1649767704,
+      "success": true,
+      "isAvailable": true,
+      "title": "JetGame Системный блок Игровой компьютер (Intel Xeon E5-2650V2, RAM 64 ГБ, SSD 1024 ГБ, NVIDIA GeForce RTX 3060 (12 Гб), Windows 10 Pro), черный",
+      "seller": { "name": "JetGame" },
+      "price_info": {
+        "cardPrice": 52156,
+        "price": 57017,
+        "originalPrice": 85000
+      },
+      "error": null
+    },
+    {
+      "article": 2433082108,
+      "success": true,
+      "isAvailable": true,
+      "title": "TREIDCOMPUTERS Системный блок Pulse (Intel Core i5-14400F, RAM 32 ГБ, SSD 960 ГБ, NVIDIA GeForce RTX 5060 (8 Гб), Windows), белый",
+      "seller": { "name": "TREIDCOMPUTERS" },
+      "price_info": {
+        "cardPrice": 76198,
+        "price": 83300,
+        "originalPrice": 350000
+      },
+      "error": null
+    },
+    {
+      "article": 1998259730,
+      "success": true,
+      "isAvailable": true,
+      "title": "XDOT Системный блок игровой компьютер FORGE V1 (AMD Ryzen 5 7500F, RAM 32 ГБ, SSD 1000 ГБ, NVIDIA GeForce RTX 5060 (8 Гб), Windows 11 Pro), черный",
+      "seller": { "name": "XDOT PC" },
+      "price_info": {
+        "cardPrice": 105920,
+        "price": 117689,
+        "originalPrice": 153000
+      },
+      "error": null
+    },
+    {
+      "article": 2293789309,
+      "success": false,
+      "isAvailable": null,
+      "title": null,
+      "seller": null,
+      "price_info": null,
+      "error": "JSON parsing failed"
+    },
+    {
+      "article": 1787544241,
+      "success": true,
+      "isAvailable": true,
+      "title": "Intel Системный блок (Intel Core i5-12400F, RAM 32 ГБ, SSD 1000 ГБ, NVIDIA GeForce RTX 3060 (12 Гб), Windows 11 Pro), разноцветный",
+      "seller": { "name": "relotech" },
+      "price_info": {
+        "cardPrice": 67886,
+        "price": 74213,
+        "originalPrice": 300000
+      },
+      "error": null
+    },
+    {
+      "article": 1691820698,
+      "success": true,
+      "isAvailable": true,
+      "title": "CYBER ARTEL Системный блок CYBER ARTEL (Intel Core i5-12400F, RAM 32 ГБ, SSD 1000 ГБ, NVIDIA GeForce RTX 4060 (8 Гб), Windows 10 Pro), черный, зеркальный",
+      "seller": { "name": "CYBER ARTEL" },
+      "price_info": {
+        "cardPrice": 89378,
+        "price": 99309,
+        "originalPrice": 265178
       },
       "error": null
     }
   ],
-  "errors": []
+  "errors": [
+    "JSON parsing failed",
+    "JSON parsing failed",
+    "JSON parsing failed",
+    "JSON parsing failed",
+    "JSON parsing failed"
+  ]
 }
