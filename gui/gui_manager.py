@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gui.tabs.control_tab import ControlTab
 from gui.tabs.logs_tab import LogsTab
+from gui.tabs.developer_tab import DeveloperTab
 
 
 class OzonParserGUI:
@@ -37,16 +38,21 @@ class OzonParserGUI:
         # Создаем фреймы для вкладок
         self.control_frame = ttk.Frame(self.notebook)
         self.logs_frame = ttk.Frame(self.notebook)
+        self.developer_frame = ttk.Frame(self.notebook)
         
         # Добавляем вкладки в notebook
         self.notebook.add(self.control_frame, text="Управление")
         self.notebook.add(self.logs_frame, text="Логи")
+        self.notebook.add(self.developer_frame, text="👨‍💻 Разработчик")
         
         # Создаем вкладку логов (сначала, чтобы логирование работало)
         self.logs_tab = LogsTab(self.logs_frame)
         
         # Создаем вкладку управления (передаем callback для логирования)
         self.control_tab = ControlTab(self.control_frame, self.logs_tab.log_message)
+        
+        # Создаем вкладку разработчика
+        self.developer_tab = DeveloperTab(self.developer_frame)
         
         # Логируем запуск GUI
         self.logs_tab.log_message("🖥️ GUI приложение запущено", "INFO")
