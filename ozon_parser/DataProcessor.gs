@@ -11,6 +11,7 @@ class OZON_DataProcessor {
         results.push({
           article: String(result.article),
           title: OZON_CONFIG.MESSAGES.ERROR,
+          seller: OZON_CONFIG.MESSAGES.ERROR,
           cardPrice: OZON_CONFIG.MESSAGES.ERROR,
           price: OZON_CONFIG.MESSAGES.ERROR,
           originalPrice: OZON_CONFIG.MESSAGES.ERROR,
@@ -25,19 +26,24 @@ class OZON_DataProcessor {
   processProduct(result) {
     const article = String(result.article);
     let title = OZON_CONFIG.MESSAGES.NO_DATA;
+    let seller = OZON_CONFIG.MESSAGES.NO_DATA;
     let cardPrice = OZON_CONFIG.MESSAGES.NO_PRICE_DATA;
     let price = OZON_CONFIG.MESSAGES.NO_PRICE_DATA;
     let originalPrice = OZON_CONFIG.MESSAGES.NO_PRICE_DATA;
     let isAvailable = false;
 
-    if (result.success && result.price_info) {
-      const pi = result.price_info;
+    if (result.success) {
       title = result.title || title;
-      cardPrice = pi.cardPrice || cardPrice;
-      price = pi.price || price;
-      originalPrice = pi.originalPrice || originalPrice;
-      isAvailable = pi.isAvailable || false;
+      seller = result.seller?.name || seller;
+      
+      if (result.price_info) {
+        const pi = result.price_info;
+        cardPrice = pi.cardPrice || cardPrice;
+        price = pi.price || price;
+        originalPrice = pi.originalPrice || originalPrice;
+        isAvailable = result.isAvailable || false;
+      }
     }
-    return { article, title, cardPrice, price, originalPrice, isAvailable };
+    return { article, title, seller, cardPrice, price, originalPrice, isAvailable };
   }
 }

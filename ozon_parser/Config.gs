@@ -4,6 +4,7 @@ const OZON_CONFIG = {
     NUMBER: ['№', 'номер', 'number', 'n'],
     ARTICLE: ['артикул', 'article', 'код', 'code'],
     TITLE: ['наименование', 'name', 'название', 'title', 'товар'],
+    SELLER: ['продавец', 'seller', 'компания', 'магазин', 'поставщик'],
     CARD_PRICE: ['cpp', 'с учетом спп ozon', 'cardprice', 'цена с учетом спп ozon кошелька (cpp)'],
     PRICE: ['без ozon', 'без озон', 'всех скидок', 'price'],
     ORIGINAL_PRICE: ['первоначальная цена (original)', 'первоначальная', 'original', 'оригинальная'],

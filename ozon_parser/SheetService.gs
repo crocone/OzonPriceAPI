@@ -77,6 +77,7 @@ class OZON_SheetService {
 
       const keyMap = {
         TITLE: 'title',
+        SELLER: 'seller',
         CARD_PRICE: 'cardPrice',
         PRICE: 'price',
         ORIGINAL_PRICE: 'originalPrice',
@@ -111,7 +112,7 @@ class OZON_SheetService {
       const lastRow = this.sheet.getLastRow();
       if (lastRow < OZON_CONFIG.DATA_START_ROW) return;
       const numRows = lastRow - OZON_CONFIG.DATA_START_ROW + 1;
-      ['TITLE', 'CARD_PRICE', 'PRICE', 'ORIGINAL_PRICE', 'AVAILABLE'].forEach(columnType => {
+      ['TITLE', 'SELLER', 'CARD_PRICE', 'PRICE', 'ORIGINAL_PRICE', 'AVAILABLE'].forEach(columnType => {
         if (this.columnMapping[columnType]) {
           this.sheet.getRange(OZON_CONFIG.DATA_START_ROW, this.getColumnNumber(columnType), numRows, 1).clearContent();
         }
