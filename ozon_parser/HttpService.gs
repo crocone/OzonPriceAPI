@@ -16,8 +16,12 @@ class OZON_HttpService {
 
         // Проверяем базовый формат URL
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-          Logger.log(`Неверный формат URL в ячейке ${OZON_CONFIG.API_URL_CELL}: ${url}`);
-          throw new Error(`${OZON_CONFIG.MESSAGES.INVALID_API_URL}: ${url}\n\nURL должен начинаться с http:// или https://\nПример: https://abc123.ngrok-free.app`);
+          Logger.log(
+            `Неверный формат URL в ячейке ${OZON_CONFIG.API_URL_CELL}: ${url}`
+          );
+          throw new Error(
+            `${OZON_CONFIG.MESSAGES.INVALID_API_URL}: ${url}\n\nURL должен начинаться с http:// или https://\nПример: https://abc123.ngrok-free.app`
+          );
         }
 
         // Автоматически добавляем endpoint если его нет
@@ -27,13 +31,17 @@ class OZON_HttpService {
           } else {
             url = url + "/api/v1/get_price";
           }
-          
+
           // Обновляем ячейку с полным URL
           apiUrlCell.setValue(url);
-          Logger.log(`Автоматически добавлен endpoint. Обновленный URL: ${url}`);
+          Logger.log(
+            `Автоматически добавлен endpoint. Обновленный URL: ${url}`
+          );
         }
 
-        Logger.log(`Используем API URL из ячейки ${OZON_CONFIG.API_URL_CELL}: ${url}`);
+        Logger.log(
+          `Используем API URL из ячейки ${OZON_CONFIG.API_URL_CELL}: ${url}`
+        );
         return url;
       } else {
         // Ячейка пустая - ОШИБКА!
@@ -54,7 +62,7 @@ class OZON_HttpService {
   isValidApiUrl(url) {
     try {
       // Проверяем что URL не пустой
-      if (!url || typeof url !== 'string' || !url.trim()) {
+      if (!url || typeof url !== "string" || !url.trim()) {
         return false;
       }
 

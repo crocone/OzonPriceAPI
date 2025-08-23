@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 class OzonParser:
     def __init__(self):
-        self.MAX_WORKERS = 15
-        self.MIN_ARTICLES_PER_WORKER = 3
+        self.MAX_WORKERS = settings.MAX_WORKERS
+        self.MIN_ARTICLES_PER_WORKER = settings.MAX_ARTICLES_PER_WORKER
         self.TARGET_TIME_SECONDS = 90  # 1.5 минуты
         self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
     

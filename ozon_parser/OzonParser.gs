@@ -14,22 +14,84 @@ class OZON_OzonParser {
         OZON_showProgressToast('Нет артикулов для обработки');
         return;
       }
-      const batches = this.createBatches(articlesData, OZON_CONFIG.BATCH_SIZE);
+      this.processBatchesWithSaving(articlesData, 'всех', OZON_CONFIG.BATCH_SIZE);
+    } catch (error) {
+      Logger.log(`Ошибка парсинга: ${error.message}`);
+      throw error;
+    }
+  }
+
+  parseSelectedArticles() {
+    try {
+      const selectedArticlesData = this.sheetService.getSelectedArticlesFromSheet();
+      if (selectedArticlesData.length === 0) {
+        OZON_showProgressToast('Нет выделенных артикулов для обработки');
+        return;
+      }
+      
+      Logger.log(`Найдено ${selectedArticlesData.length} выделенных артикулов для парсинга`);
+      
+      // Используем меньший размер батча для выделенных артикулов
+      this.processBatchesWithSaving(selectedArticlesData, 'выделенных', OZON_CONFIG.SELECTION_BATCH_SIZE);
+    } catch (error) {
+      Logger.log(`Ошибка парсинга выделенных артикулов: ${error.message}`);
+      throw error;
+    }
+  }
+
+  processBatchesWithSaving(articlesData, type, customBatchSize = null) {
+    try {
+      const batchSize = customBatchSize || OZON_CONFIG.BATCH_SIZE;
+      const batches = this.createBatches(articlesData, batchSize);
       const allResults = [];
+      
+      Logger.log(`Начинаем обработку ${articlesData.length} ${type} артикулов в ${batches.length} батчах (размер батча: ${batchSize})`);
+      
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        OZON_showProgressToast(`Обрабатываем батч ${i + 1} из ${batches.length}...`);
-        Logger.log(`Обрабатываем батч ${i + 1}/${batches.length} (${batch.length} артикулов)`);
+        const batchNumber = i + 1;
+        const totalBatches = batches.length;
+        
+        OZON_showProgressToast(`Обрабатываем батч ${batchNumber} из ${totalBatches} (${batch.length} артикулов)...`);
+        Logger.log(`Обрабатываем батч ${batchNumber}/${totalBatches} (${batch.length} артикулов)`);
+        
         try {
+          // Обрабатываем батч
           const batchResults = this.processBatch(batch);
           allResults.push(...batchResults);
+          
+          // ВАЖНО: Сохраняем результаты батча сразу после обработки
+          Logger.log(`🔄 Сохраняем результаты батча ${batchNumber} (${batchResults.length} результатов)...`);
+          
           this.sheetService.saveResultsToSheet(batchResults);
+          
+          // Принудительно сохраняем изменения в Google Sheets
+          SpreadsheetApp.flush();
+          
+          Logger.log(`✅ Батч ${batchNumber} обработан и сохранен (${batchResults.length} результатов)`);
+          
+          // Показываем прогресс с индикацией сохранения
+          const processedCount = allResults.length;
+          const totalCount = articlesData.length;
+          const progressPercent = Math.round((processedCount / totalCount) * 100);
+          
+          OZON_showProgressToast(`✅ Батч ${batchNumber}/${totalBatches} сохранен! Прогресс: ${processedCount}/${totalCount} (${progressPercent}%)`);
+          
+          // Дополнительная пауза после сохранения для стабильности
+          if (OZON_CONFIG.SAVE_DELAY > 0) {
+            Utilities.sleep(OZON_CONFIG.SAVE_DELAY);
+          }
+          
+          // Пауза между батчами (кроме последнего)
           if (i < batches.length - 1) {
-            Logger.log(`Ожидание ${OZON_CONFIG.REQUEST_DELAY}мс...`);
+            Logger.log(`Ожидание ${OZON_CONFIG.REQUEST_DELAY}мс перед следующим батчем...`);
             Utilities.sleep(OZON_CONFIG.REQUEST_DELAY);
           }
+          
         } catch (error) {
-          Logger.log(`Ошибка обработки батча ${i + 1}: ${error.message}`);
+          Logger.log(`❌ Ошибка обработки батча ${batchNumber}: ${error.message}`);
+          
+          // Создаем результаты с ошибками для текущего батча
           const errorResults = batch.map(item => ({
             rowIndex: item.rowIndex,
             article: String(item.article),
@@ -40,13 +102,30 @@ class OZON_OzonParser {
             originalPrice: OZON_CONFIG.MESSAGES.ERROR,
             isAvailable: false
           }));
+          
+          // Сохраняем результаты с ошибками
+          Logger.log(`🔄 Сохраняем результаты с ошибками для батча ${batchNumber}...`);
+          
           this.sheetService.saveResultsToSheet(errorResults);
           allResults.push(...errorResults);
+          
+          // Принудительно сохраняем изменения
+          SpreadsheetApp.flush();
+          
+          Logger.log(`⚠️ Батч ${batchNumber} обработан с ошибками и сохранен`);
+          
+          // Дополнительная пауза после сохранения
+          if (OZON_CONFIG.SAVE_DELAY > 0) {
+            Utilities.sleep(OZON_CONFIG.SAVE_DELAY);
+          }
         }
       }
-      Logger.log(`Обработано ${allResults.length} артикулов`);
+      
+      Logger.log(`🎉 Обработка завершена! Всего обработано ${allResults.length} ${type} артикулов`);
+      OZON_showProgressToast(`Обработка завершена! ${allResults.length} ${type} артикулов обработано`);
+      
     } catch (error) {
-      Logger.log(`Ошибка парсинга: ${error.message}`);
+      Logger.log(`Критическая ошибка обработки батчей: ${error.message}`);
       throw error;
     }
   }

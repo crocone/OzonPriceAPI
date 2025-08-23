@@ -127,7 +127,7 @@ async def shutdown_event():
     
     # Отключаем ngrok туннель
     try:
-        ngrok.disconnect_all()
+        # ngrok.disconnect_all()
         logger.info("ngrok туннель отключен")
     except Exception as e:
         logger.warning(f"Ошибка отключения ngrok: {e}")
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     finally:
         # Отключаем ngrok при завершении
         try:
-            ngrok.disconnect_all()
+            # ngrok.disconnect_all()
             logger.info("🔌 ngrok туннель отключен")
         except Exception as e:
             logger.warning(f"⚠️  Ошибка отключения ngrok: {e}")

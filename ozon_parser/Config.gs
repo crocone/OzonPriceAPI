@@ -13,11 +13,18 @@ const OZON_CONFIG = {
   },
   // Настройки API
   API_URL_CELL: 'B1', // Ячейка для настройки API URL (ОБЯЗАТЕЛЬНО)
-  BATCH_SIZE: 50,
-  REQUEST_DELAY: 2000,
+  BATCH_SIZE: 130,
+  REQUEST_DELAY: 2000, // Задержка между батчами в миллисекундах
   MAX_RETRIES: 3,
   HEADER_ROW: 2,
   DATA_START_ROW: 3,
+  
+  // Настройки для выделенных артикулов
+  SELECTION_BATCH_SIZE: 1, // Меньший размер батча для выделенных артикулов
+  
+  // Настройки сохранения
+  SAVE_DELAY: 500, // Задержка после сохранения в миллисекундах
+  FORCE_FLUSH: true, // Принудительное сохранение изменений
   MESSAGES: {
     NO_PRICE_DATA: 'Цена не найдена',
     NO_DATA: 'Не найдено',
@@ -26,6 +33,8 @@ const OZON_CONFIG = {
     NOT_AVAILABLE: 'Нет в наличии',
     COLUMN_NOT_FOUND: 'Столбец не найден',
     API_URL_NOT_SET: 'API URL не настроен',
-    INVALID_API_URL: 'Неверный формат API URL'
+    INVALID_API_URL: 'Неверный формат API URL',
+    NO_SELECTION: 'Нет выделенного диапазона',
+    NO_VALID_ARTICLES_IN_SELECTION: 'В выделенном диапазоне нет валидных артикулов'
   }
 };

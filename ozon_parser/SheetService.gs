@@ -68,41 +68,163 @@ class OZON_SheetService {
     }
   }
 
+  getSelectedArticlesFromSheet() {
+    try {
+      this.validateColumns();
+      
+      // Получаем выделенный диапазон
+      const selection = this.sheet.getSelection();
+      const activeRange = selection.getActiveRange();
+      
+      if (!activeRange) {
+        throw new Error('Нет выделенного диапазона. Выделите ячейки с артикулами для парсинга.');
+      }
+      
+      const articleCol = this.getColumnNumber('ARTICLE');
+      const articles = [];
+      
+      // Получаем все выделенные диапазоны
+      const ranges = selection.getActiveRangeList() ? selection.getActiveRangeList().getRanges() : [activeRange];
+      
+      Logger.log(`Найдено ${ranges.length} выделенных диапазонов`);
+      
+      ranges.forEach((range, rangeIndex) => {
+        const startRow = range.getRow();
+        const endRow = range.getLastRow();
+        const startCol = range.getColumn();
+        const endCol = range.getLastColumn();
+        
+        Logger.log(`Диапазон ${rangeIndex + 1}: строки ${startRow}-${endRow}, колонки ${startCol}-${endCol}`);
+        
+        // Проверяем, пересекается ли выделение с колонкой артикулов
+        if (startCol <= articleCol && endCol >= articleCol) {
+          // Выделение включает колонку артикулов
+          for (let row = Math.max(startRow, OZON_CONFIG.DATA_START_ROW); row <= endRow; row++) {
+            try {
+              const cellValue = this.sheet.getRange(row, articleCol).getValue();
+              const article = String(cellValue).trim();
+              
+              if (article && /^\d{3,15}$/.test(article)) {
+                articles.push({ 
+                  article: parseInt(article), 
+                  rowIndex: row 
+                });
+                Logger.log(`Добавлен артикул: ${article} из строки ${row}`);
+              } else if (article) {
+                Logger.log(`Невалидный артикул в строке ${row}: ${article}`);
+              }
+            } catch (error) {
+              Logger.log(`Ошибка чтения ячейки в строке ${row}: ${error.message}`);
+            }
+          }
+        }
+      });
+      
+      // Удаляем дубликаты и сортируем по rowIndex
+      const uniqueArticles = [];
+      const seenArticles = new Set();
+      
+      articles.forEach(item => {
+        const key = `${item.article}_${item.rowIndex}`;
+        if (!seenArticles.has(key)) {
+          seenArticles.add(key);
+          uniqueArticles.push(item);
+        }
+      });
+      
+      uniqueArticles.sort((a, b) => a.rowIndex - b.rowIndex);
+      
+      Logger.log(`Найдено ${uniqueArticles.length} уникальных выделенных артикулов`);
+      
+      if (uniqueArticles.length === 0) {
+        throw new Error('В выделенном диапазоне не найдено валидных артикулов. Убедитесь, что выделили ячейки с артикулами (числа от 3 до 15 цифр).');
+      }
+      
+      return uniqueArticles;
+      
+    } catch (error) {
+      Logger.log(`Ошибка получения выделенных артикулов: ${error.message}`);
+      throw error;
+    }
+  }
+
   saveResultsToSheet(results) {
     try {
-      if (results.length === 0) return;
+      if (results.length === 0) {
+        Logger.log('Нет результатов для сохранения');
+        return;
+      }
+      
+      Logger.log(`Начинаем сохранение ${results.length} результатов`);
+      
+      // Сортируем результаты по индексу строки
       results.sort((a, b) => a.rowIndex - b.rowIndex);
-      const startRow = results[0].rowIndex;
-      const numRows = results.length;
-
+      
       const keyMap = {
         TITLE: 'title',
-        SELLER: 'seller',
+        SELLER: 'seller', 
         CARD_PRICE: 'cardPrice',
         PRICE: 'price',
         ORIGINAL_PRICE: 'originalPrice',
         AVAILABLE: 'isAvailable'
       };
 
+      // Обрабатываем каждый тип колонки отдельно
       Object.keys(keyMap).forEach(columnType => {
-        if (!this.columnMapping[columnType]) return;
-        const col = this.getColumnNumber(columnType);
-        const range = this.sheet.getRange(startRow, col, numRows, 1);
-        const key = keyMap[columnType];
-        const values = results.map(result => [result[key] ?? '']);
-        range.setValues(values);
-
-        if (['CARD_PRICE', 'PRICE', 'ORIGINAL_PRICE'].includes(columnType)) {
-          range.setNumberFormat('#,##0" ₽"');
-        }
-        if (columnType === 'AVAILABLE') {
-          range.setValues(results.map(result => [result[key] ? 'Да' : 'Нет']));
+        try {
+          if (!this.columnMapping[columnType]) {
+            Logger.log(`Колонка ${columnType} не найдена, пропускаем`);
+            return;
+          }
+          
+          const col = this.getColumnNumber(columnType);
+          const key = keyMap[columnType];
+          
+          Logger.log(`Сохраняем данные в колонку ${columnType} (${col})`);
+          
+          // Подготавливаем значения для записи
+          let values;
+          if (columnType === 'AVAILABLE') {
+            // Для доступности преобразуем boolean в текст
+            values = results.map(result => [result[key] ? 'Да' : 'Нет']);
+          } else {
+            // Для остальных колонок используем значения как есть
+            values = results.map(result => [result[key] ?? '']);
+          }
+          
+          // Записываем данные по строкам (для надежности)
+          results.forEach((result, index) => {
+            try {
+              const range = this.sheet.getRange(result.rowIndex, col, 1, 1);
+              range.setValue(values[index][0]);
+              
+              // Применяем форматирование для цен
+              if (['CARD_PRICE', 'PRICE', 'ORIGINAL_PRICE'].includes(columnType)) {
+                if (typeof values[index][0] === 'number' && values[index][0] > 0) {
+                  range.setNumberFormat('#,##0" ₽"');
+                }
+              }
+            } catch (cellError) {
+              Logger.log(`Ошибка записи в ячейку ${result.rowIndex}:${col}: ${cellError.message}`);
+            }
+          });
+          
+          Logger.log(`✅ Колонка ${columnType} сохранена успешно`);
+          
+        } catch (columnError) {
+          Logger.log(`❌ Ошибка сохранения колонки ${columnType}: ${columnError.message}`);
         }
       });
 
-      Logger.log(`Сохранено ${results.length} результатов`);
+      // Принудительно сохраняем изменения
+      if (OZON_CONFIG.FORCE_FLUSH) {
+        SpreadsheetApp.flush();
+      }
+      
+      Logger.log(`✅ Успешно сохранено ${results.length} результатов в таблицу`);
+      
     } catch (error) {
-      Logger.log(`Ошибка сохранения результатов: ${error.message}`);
+      Logger.log(`❌ Критическая ошибка сохранения результатов: ${error.message}`);
       throw error;
     }
   }

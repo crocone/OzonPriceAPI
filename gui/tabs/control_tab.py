@@ -22,11 +22,14 @@ class ControlTab:
         
         # Переменные состояния
         self.api_process = None
+        self.api_thread = None  # Для встроенного режима
         self.is_running = False
         self.ngrok_url = None
         
         # Создание интерфейса
         self.create_widgets()
+    
+
     
     def create_widgets(self):
         """Создание виджетов вкладки управления"""
@@ -38,6 +41,8 @@ class ControlTab:
             bg='#f0f0f0'
         )
         title_label.pack(pady=20)
+        
+
         
         # Статус
         self.status_frame = tk.Frame(self.parent_frame, bg='#f0f0f0')
@@ -173,25 +178,8 @@ class ControlTab:
     def run_api_process(self):
         """Запуск процесса API"""
         try:
-            # Проверяем, не занят ли порт 8000
-            import socket
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
-                result = sock.connect_ex(('localhost', 8000))
-                sock.close()
-                
-                if result == 0:
-                    self.log_callback("⚠️ Порт 8000 занят, пытаемся освободить...", "WARNING")
-                    # Пытаемся убить процессы на порту 8000 (Windows)
-                    if os.name == 'nt':
-                        try:
-                            subprocess.run(['netstat', '-ano', '|', 'findstr', ':8000'], 
-                                         shell=True, capture_output=True, timeout=5)
-                        except:
-                            pass
-            except:
-                pass  # Игнорируем ошибки проверки порта
+            # Проверяем, не занят ли порт 8000 и освобождаем его
+            self.cleanup_port_8000()
             
             # Проверяем наличие venv
             if os.name == 'nt':  # Windows
@@ -203,70 +191,75 @@ class ControlTab:
                 python_path = sys.executable
                 self.log_callback("⚠️ venv не найден, используем системный Python", "WARNING")
             
-            # Очищаем переменные окружения от предыдущих ngrok сессий
-            env = os.environ.copy()
-            env.pop('NGROK_AUTHTOKEN', None)
-            
-            # Запускаем app.py
-            self.api_process = subprocess.Popen(
-                [python_path, 'app.py'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
-                env=env,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
-            )
-            
-            self.log_callback("✅ API процесс запущен", "INFO")
-            
-            # Обновляем статус в главном потоке
-            self.parent_frame.after(0, lambda: self.status_label.config(text="Запущен", fg='green'))
-            
-            # Читаем вывод процесса
-            ngrok_url_found = False
-            startup_timeout = 30  # 30 секунд на запуск
-            start_time = time.time()
-            
-            for line in iter(self.api_process.stdout.readline, ''):
-                if not self.is_running:  # Проверяем, не остановили ли мы процесс
-                    break
-                    
-                if line:
-                    line = line.strip()
-                    
-                    # Ищем ngrok URL в выводе
-                    ngrok_match = re.search(r'https://[a-zA-Z0-9-]+\.ngrok(?:-free)?\.app', line)
-                    if ngrok_match and not ngrok_url_found:
-                        self.ngrok_url = ngrok_match.group(0)
-                        ngrok_url_found = True
-                        self.parent_frame.after(0, self.update_ngrok_url)
-                    
-                    # Определяем уровень лога по содержимому
-                    if 'ERROR' in line or 'error' in line.lower():
-                        level = 'ERROR'
-                    elif 'WARNING' in line or 'warning' in line.lower():
-                        level = 'WARNING'
-                    elif 'DEBUG' in line:
-                        level = 'DEBUG'
-                    else:
-                        level = 'INFO'
-                    
-                    self.log_callback(line, level)
+            # Проверяем, запускаемся ли мы из .exe файла
+            if hasattr(sys, '_MEIPASS'):
+                # Запуск из .exe - используем встроенные функции
+                self.log_callback("🔧 Запуск API из .exe файла (встроенный режим)", "INFO")
+                self.run_api_embedded()
+                return
+            else:
+                # Запуск из исходного кода - используем subprocess
+                cmd = [python_path, 'app.py']
+                self.log_callback(f"🔧 Команда запуска: {' '.join(cmd)}", "DEBUG")
                 
-                # Проверяем, не завершился ли процесс
-                if self.api_process.poll() is not None:
-                    break
+                self.api_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    bufsize=1,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
+                )
                 
-                # Проверяем таймаут запуска
-                if not ngrok_url_found and (time.time() - start_time) > startup_timeout:
-                    self.log_callback("⚠️ Таймаут запуска - ngrok URL не получен", "WARNING")
-                    break
-            
-            # Процесс завершился
-            if self.is_running:  # Только если мы не остановили его сами
-                self.log_callback("🛑 API процесс завершен", "WARNING")
-                self.parent_frame.after(0, self.on_api_stopped)
+                self.log_callback("✅ API процесс запущен", "INFO")
+                
+                # Обновляем статус в главном потоке
+                self.parent_frame.after(0, lambda: self.status_label.config(text="Запущен", fg='green'))
+                
+                # Читаем вывод процесса
+                ngrok_url_found = False
+                startup_timeout = 30  # 30 секунд на запуск
+                start_time = time.time()
+                
+                for line in iter(self.api_process.stdout.readline, ''):
+                    if not self.is_running:  # Проверяем, не остановили ли мы процесс
+                        break
+                        
+                    if line:
+                        line = line.strip()
+                        
+                        # Ищем ngrok URL в выводе
+                        ngrok_match = re.search(r'https://[a-zA-Z0-9-]+\.ngrok(?:-free)?\.app', line)
+                        if ngrok_match and not ngrok_url_found:
+                            self.ngrok_url = ngrok_match.group(0)
+                            ngrok_url_found = True
+                            self.parent_frame.after(0, self.update_ngrok_url)
+                        
+                        # Определяем уровень лога по содержимому
+                        if 'ERROR' in line or 'error' in line.lower():
+                            level = 'ERROR'
+                        elif 'WARNING' in line or 'warning' in line.lower():
+                            level = 'WARNING'
+                        elif 'DEBUG' in line:
+                            level = 'DEBUG'
+                        else:
+                            level = 'INFO'
+                        
+                        self.log_callback(line, level)
+                    
+                    # Проверяем, не завершился ли процесс
+                    if self.api_process.poll() is not None:
+                        break
+                    
+                    # Проверяем таймаут запуска
+                    if not ngrok_url_found and (time.time() - start_time) > startup_timeout:
+                        self.log_callback("⚠️ Таймаут запуска - ngrok URL не получен", "WARNING")
+                        break
+                
+                # Процесс завершился
+                if self.is_running:  # Только если мы не остановили его сами
+                    self.log_callback("🛑 API процесс завершен", "WARNING")
+                    self.parent_frame.after(0, self.on_api_stopped)
             
         except Exception as e:
             self.log_callback(f"❌ Ошибка запуска API: {e}", "ERROR")
@@ -280,7 +273,25 @@ class ControlTab:
         self.log_callback("🛑 Остановка API сервера...", "INFO")
         
         try:
-            if self.api_process:
+            # Проверяем режим запуска
+            if hasattr(sys, '_MEIPASS'):
+                # Встроенный режим - останавливаем ngrok и помечаем как остановленный
+                self.log_callback("🔧 Остановка встроенного API...", "INFO")
+                try:
+                    from pyngrok import ngrok
+                    # Правильный способ отключения всех туннелей
+                    tunnels = ngrok.get_tunnels()
+                    for tunnel in tunnels:
+                        ngrok.disconnect(tunnel.public_url)
+                    self.log_callback("🔌 ngrok туннели отключены", "INFO")
+                except Exception as e:
+                    self.log_callback(f"⚠️ Ошибка отключения ngrok: {e}", "WARNING")
+                
+                # Помечаем как остановленный (сервер остановится сам при завершении приложения)
+                self.log_callback("✅ API остановлен (встроенный режим)", "INFO")
+                
+            elif self.api_process:
+                # Режим subprocess - завершаем процесс
                 # Сначала пытаемся мягко завершить
                 self.api_process.terminate()
                 
@@ -360,6 +371,44 @@ class ControlTab:
             self.log_callback("📋 URL скопирован в буфер обмена", "INFO")
             messagebox.showinfo("Успех", "URL скопирован в буфер обмена!")
     
+    def cleanup_port_8000(self):
+        """Очистка порта 8000 от занимающих процессов"""
+        try:
+            # Проверяем, не занят ли порт 8000
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', 8000))
+            sock.close()
+            
+            if result == 0:
+                self.log_callback("⚠️ Порт 8000 занят, освобождаем...", "WARNING")
+                
+                if os.name == 'nt':  # Windows
+                    # Находим и убиваем процессы на порту 8000
+                    result = subprocess.run(['netstat', '-ano'], 
+                                          capture_output=True, text=True, timeout=5)
+                    for line in result.stdout.split('\n'):
+                        if ':8000' in line and 'LISTENING' in line:
+                            parts = line.split()
+                            if len(parts) > 4:
+                                pid = parts[-1]
+                                try:
+                                    subprocess.run(['taskkill', '/f', '/pid', pid], 
+                                                 capture_output=True, timeout=3)
+                                    self.log_callback(f"🔧 Завершен процесс PID {pid} на порту 8000", "INFO")
+                                except:
+                                    pass
+                else:  # Linux/Mac
+                    # Убиваем процессы на порту 8000
+                    subprocess.run(['lsof', '-ti:8000', '|', 'xargs', 'kill', '-9'], 
+                                 shell=True, capture_output=True, timeout=5)
+                    self.log_callback("🔧 Процессы на порту 8000 завершены", "INFO")
+                
+                # Ждем немного, чтобы порт освободился
+                time.sleep(1)
+        except:
+            pass  # Игнорируем ошибки проверки порта
+    
     def cleanup_ngrok_processes(self):
         """Принудительная очистка ngrok процессов"""
         try:
@@ -367,27 +416,75 @@ class ControlTab:
                 # Убиваем все процессы ngrok
                 subprocess.run(['taskkill', '/f', '/im', 'ngrok.exe'], 
                              capture_output=True, timeout=5)
-                # Убиваем процессы на порту 8000
-                result = subprocess.run(['netstat', '-ano'], 
-                                      capture_output=True, text=True, timeout=5)
-                for line in result.stdout.split('\n'):
-                    if ':8000' in line and 'LISTENING' in line:
-                        parts = line.split()
-                        if len(parts) > 4:
-                            pid = parts[-1]
-                            try:
-                                subprocess.run(['taskkill', '/f', '/pid', pid], 
-                                             capture_output=True, timeout=3)
-                            except:
-                                pass
+                self.log_callback("🔧 ngrok процессы завершены", "INFO")
             else:  # Linux/Mac
                 # Убиваем процессы ngrok
                 subprocess.run(['pkill', '-f', 'ngrok'], capture_output=True, timeout=5)
-                # Убиваем процессы на порту 8000
-                subprocess.run(['lsof', '-ti:8000', '|', 'xargs', 'kill', '-9'], 
-                             shell=True, capture_output=True, timeout=5)
+                self.log_callback("🔧 ngrok процессы завершены", "INFO")
         except:
             pass  # Игнорируем ошибки очистки
+    
+    def run_api_embedded(self):
+        """Запуск API встроенно в .exe файле"""
+        try:
+            # Очищаем порт 8000 перед запуском
+            self.cleanup_port_8000()
+            
+            # Импортируем функции из app.py
+            from app import app
+            import uvicorn
+            
+            self.log_callback("✅ API модули импортированы", "INFO")
+            
+            # Запускаем ngrok туннель с обработкой ошибок
+            self.log_callback("🌐 Запуск ngrok туннеля...", "INFO")
+            try:
+                # Пытаемся запустить ngrok напрямую
+                from pyngrok import ngrok
+                tunnel = ngrok.connect(8000)
+                if tunnel:
+                    # Извлекаем только URL из объекта NgrokTunnel
+                    self.ngrok_url = tunnel.public_url
+                    self.parent_frame.after(0, self.update_ngrok_url)
+                    self.log_callback(f"✅ ngrok туннель запущен: {self.ngrok_url}", "INFO")
+            except Exception as e:
+                self.log_callback(f"⚠️ Ошибка ngrok: {e}", "WARNING")
+                self.log_callback("🔧 Работаем только с локальным сервером", "INFO")
+            
+            self.log_callback("🌐 Локальный сервер: http://localhost:8000", "INFO")
+            
+            # Обновляем статус
+            self.parent_frame.after(0, lambda: self.status_label.config(text="Запущен", fg='green'))
+            
+            # Запускаем FastAPI сервер в отдельном потоке
+            def run_server():
+                try:
+                    self.log_callback("🔥 Запуск FastAPI сервера...", "INFO")
+                    
+                    # Запускаем сервер с минимальной конфигурацией для .exe
+                    uvicorn.run(
+                        app,
+                        host="0.0.0.0",
+                        port=8000,
+                        reload=False,
+                        log_level="error",  # Минимальный уровень логов
+                        access_log=False,   # Отключаем access log
+                        use_colors=False,   # Отключаем цвета
+                        log_config=None     # Отключаем кастомную конфигурацию логов
+                    )
+                except Exception as e:
+                    self.log_callback(f"❌ Ошибка сервера: {e}", "ERROR")
+                    self.parent_frame.after(0, self.on_api_stopped)
+            
+            # Запускаем сервер в отдельном потоке
+            self.api_thread = threading.Thread(target=run_server, daemon=True)
+            self.api_thread.start()
+            
+            self.log_callback("✅ API запущен в встроенном режиме", "INFO")
+            
+        except Exception as e:
+            self.log_callback(f"❌ Ошибка запуска встроенного API: {e}", "ERROR")
+            self.parent_frame.after(0, self.on_api_stopped)
     
     def force_cleanup(self):
         """Принудительная очистка всех процессов"""
@@ -402,6 +499,7 @@ class ControlTab:
         
         # Принудительная очистка
         self.cleanup_ngrok_processes()
+        self.cleanup_port_8000()
         
         # Сбрасываем состояние
         self.on_api_stopped()
