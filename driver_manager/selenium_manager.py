@@ -22,52 +22,29 @@ class SeleniumManager:
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
 
+    def setup_driver(self):
+        chrome_options = uc.ChromeOptions()
 
-    def setup_driver(self) -> webdriver.Chrome:
-        chrome_options = Options()
-        
+        if settings.HEADLESS:
+            chrome_options.add_argument("--headless=new")
+
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-plugins")
-        
-        if settings.HEADLESS:
-            chrome_options.add_argument("--headless")
-        
-        chrome_options.add_argument("--window-size=375,667")
-        
-        try:
-            driver = webdriver.Chrome(options=chrome_options)
-            
+        chrome_options.add_argument("--window-size=1920,1080")
 
-            stealth(driver,
-                   languages=["ru-RU", "ru"],
-                   vendor="Google Inc.",
-                   platform="Win32",
-                   webgl_vendor="Intel Inc.",
-                   renderer="Intel Iris OpenGL Engine",
-                   fix_hairline=True)
-            
+        chrome_options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/130.0.6723.59 Safari/537.36"
+        )
 
-            driver.implicitly_wait(20)
-            driver.set_page_load_timeout(60)
-            
+        driver = uc.Chrome(options=chrome_options)
 
-            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            self.driver = driver
-            self.wait = WebDriverWait(driver, 20)
-            
-            logger.info("Chrome драйвер создан успешно")
-            return driver
-            
-        except WebDriverException as e:
-            logger.error(f"Ошибка создания Chrome драйвера: {e}")
-            raise
+        self.driver = driver
+        self.wait = WebDriverWait(driver, 20)
+
+        logger.info("Chrome driver created successfully")
+        return driver
     
     def navigate_to_url(self, url: str) -> bool:
         if not self.driver:
