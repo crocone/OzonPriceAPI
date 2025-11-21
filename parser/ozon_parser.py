@@ -183,18 +183,30 @@ class OzonWorker:
         for attempt in range(2):  # Максимум 2 попытки для скорости
             try:
                 api_url = build_ozon_api_url(article)
-                
-                # Быстрая навигация без задержек
-                navigation_success = self.selenium_manager.navigate_to_url(api_url)
-                
+
+                # 0) Прогрев куков: сначала открываем обычную карточку товара
+                product_url = f"{settings.OZON_BASE_URL}/product/{article}/"
+
+                navigation_success = self.selenium_manager.navigate_to_url(product_url)
                 if not navigation_success:
                     if attempt == 0:
-                        time.sleep(1)  # Короткая пауза только при первой неудаче
+                        time.sleep(1)
+                        continue
+                    return ArticleResult(article=article, success=False, error="Navigation to product page failed")
+
+                time.sleep(2)  # даём озону поставить куки/сессию
+
+                # 1) Теперь идём в composer-api
+                navigation_success = self.selenium_manager.navigate_to_url(api_url)
+
+                if not navigation_success:
+                    if attempt == 0:
+                        time.sleep(1)
                         continue
                     return ArticleResult(article=article, success=False, error="Navigation failed")
-                
-                # Быстрое получение JSON
-                json_content = self.selenium_manager.wait_for_json_response(timeout=10)
+
+                # 2) Ждём JSON дольше (10с часто мало на VPS)
+                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
                 
                 if not json_content:
                     if attempt == 0:
