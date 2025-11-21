@@ -124,67 +124,67 @@ class SeleniumManager:
             return True
     
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
-    if not self.driver:
-        return None
-
-    try:
-        start_time = time.time()
-
-        # Ждём полной загрузки страницы столько, сколько задано timeout
-        WebDriverWait(self.driver, timeout).until(
-            lambda driver: driver.execute_script("return document.readyState") == "complete"
-        )
-
-        last_snippet = None
-
-        while time.time() - start_time < timeout:
-            try:
-                page_source = self.driver.page_source
-                json_content = self.extract_json_from_html(page_source)
-
-                if json_content:
-                    try:
-                        data = json.loads(json_content)
-                        if "widgetStates" in data:
-                            logger.info("JSON response with widgetStates found")
-                            return json_content
-                    except json.JSONDecodeError:
-                        pass
-
-                # Диагностика тела ответа
-                try:
-                    snippet = self.driver.execute_script(
-                        "return document.body.innerText"
-                    )[:500]
-
-                    if snippet != last_snippet:
-                        last_snippet = snippet
-                        logger.debug(f"Body snippet (first 500 chars): {snippet}")
-                except Exception:
-                    pass
-
-                time.sleep(0.5)
-
-            except Exception as e:
-                logger.debug(f"Error checking page source: {e}")
-                time.sleep(0.5)
-                continue
-
-        logger.warning(f"Timeout waiting for JSON response after {timeout} seconds")
+        if not self.driver:
+            return None
 
         try:
-            snippet = self.driver.execute_script(
-                "return document.body.innerText"
-            )[:500]
-            logger.warning(f"Final body snippet: {snippet}")
-        except Exception:
-            pass
+            start_time = time.time()
 
-        return self.extract_json_from_html(self.driver.page_source)
+            # Ждём полной загрузки страницы столько, сколько задано timeout
+            WebDriverWait(self.driver, timeout).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
 
-    except Exception as e:
-        logger.error(f"Error waiting for JSON response: {e}")
-        return None
+            last_snippet = None
+
+            while time.time() - start_time < timeout:
+                try:
+                    page_source = self.driver.page_source
+                    json_content = self.extract_json_from_html(page_source)
+
+                    if json_content:
+                        try:
+                            data = json.loads(json_content)
+                            if "widgetStates" in data:
+                                logger.info("JSON response with widgetStates found")
+                                return json_content
+                        except json.JSONDecodeError:
+                            pass
+
+                    # Диагностика тела ответа
+                    try:
+                        snippet = self.driver.execute_script(
+                            "return document.body.innerText"
+                        )[:500]
+
+                        if snippet != last_snippet:
+                            last_snippet = snippet
+                            logger.debug(f"Body snippet (first 500 chars): {snippet}")
+                    except Exception:
+                        pass
+
+                    time.sleep(0.5)
+
+                except Exception as e:
+                    logger.debug(f"Error checking page source: {e}")
+                    time.sleep(0.5)
+                    continue
+
+            logger.warning(f"Timeout waiting for JSON response after {timeout} seconds")
+
+            try:
+                snippet = self.driver.execute_script(
+                    "return document.body.innerText"
+                )[:500]
+                logger.warning(f"Final body snippet: {snippet}")
+            except Exception:
+                pass
+
+            return self.extract_json_from_html(self.driver.page_source)
+
+        except Exception as e:
+            logger.error(f"Error waiting for JSON response: {e}")
+            return None
 
 
     
