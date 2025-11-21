@@ -130,8 +130,7 @@ class SeleniumManager:
     try:
         start_time = time.time()
 
-        # Ждём полной загрузки страницы столько, сколько задано timeout,
-        # а не фиксированные 10 секунд
+        # Ждём полной загрузки страницы столько, сколько задано timeout
         WebDriverWait(self.driver, timeout).until(
             lambda driver: driver.execute_script("return document.readyState") == "complete"
         )
@@ -146,17 +145,23 @@ class SeleniumManager:
                 if json_content:
                     try:
                         data = json.loads(json_content)
-                        if 'widgetStates' in data:
+                        if "widgetStates" in data:
                             logger.info("JSON response with widgetStates found")
                             return json_content
                     except json.JSONDecodeError:
                         pass
 
-                # Диагностика: что реально в body?
-                snippet = self.driver.execute_script("return document.body.innerText")[:500]
-                if snippet != last_snippet:
-                    last_snippet = snippet
-                    logger.debug(f"Body snippet (first 500 chars): {snippet}")
+                # Диагностика тела ответа
+                try:
+                    snippet = self.driver.execute_script(
+                        "return document.body.innerText"
+                    )[:500]
+
+                    if snippet != last_snippet:
+                        last_snippet = snippet
+                        logger.debug(f"Body snippet (first 500 chars): {snippet}")
+                except Exception:
+                    pass
 
                 time.sleep(0.5)
 
@@ -167,9 +172,10 @@ class SeleniumManager:
 
         logger.warning(f"Timeout waiting for JSON response after {timeout} seconds")
 
-        # Перед финальным возвратом ещё раз логируем snippet — это поможет понять причину
         try:
-            snippet = self.driver.execute_script("return document.body.innerText")[:500]
+            snippet = self.driver.execute_script(
+                "return document.body.innerText"
+            )[:500]
             logger.warning(f"Final body snippet: {snippet}")
         except Exception:
             pass
@@ -179,6 +185,7 @@ class SeleniumManager:
     except Exception as e:
         logger.error(f"Error waiting for JSON response: {e}")
         return None
+
 
     
     def extract_json_from_html(self, html_content: str) -> Optional[str]:
