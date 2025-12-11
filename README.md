@@ -156,6 +156,7 @@ curl -X GET "https://your-ngrok-url.ngrok.io/docs"
 - `API_HOST` - хост API (по умолчанию: "0.0.0.0")
 - `API_PORT` - порт API (по умолчанию: 8000)
 - `HEADLESS` - режим браузера без GUI
+- `CHROME_BINARY` - путь к исполняемому файлу Chrome/Chromium (необязательно)
 - `MAX_ARTICLES_PER_REQUEST` - максимум артикулов за запрос
 - `MAX_RETRIES` - количество повторных попыток
 - `ENABLE_PROXY` - включить/выключить использование прокси

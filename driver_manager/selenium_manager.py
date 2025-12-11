@@ -12,6 +12,8 @@ from typing import Optional
 import time
 import json
 import random
+import os
+import shutil
 import undetected_chromedriver as uc
 from utils.proxy_manager import proxy_manager, ProxyInfo
 
@@ -40,6 +42,14 @@ class SeleniumManager:
             "Chrome/130.0.6723.59 Safari/537.36"
         )
 
+        chrome_binary = self._find_chrome_binary()
+
+        if chrome_binary:
+            chrome_options.binary_location = chrome_binary
+            logger.info("Using Chrome binary at %s", chrome_binary)
+        else:
+            logger.warning("Chrome binary not found via autodetect, relying on default lookup")
+
         self.proxy = proxy_manager.get_random_proxy()
 
         if self.proxy:
@@ -48,13 +58,33 @@ class SeleniumManager:
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
-        driver = uc.Chrome(options=chrome_options)
+        driver = uc.Chrome(options=chrome_options, browser_executable_path=chrome_binary if chrome_binary else None)
 
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
         logger.info("Chrome driver created successfully")
         return driver
+
+    def _find_chrome_binary(self) -> Optional[str]:
+        """Locate Chrome/Chromium executable.
+
+        Priority:
+        1. Explicit CHROME_BINARY environment variable
+        2. Common executables in PATH: google-chrome, chromium, chromium-browser, chrome
+        """
+
+        env_path = settings.CHROME_BINARY
+        if env_path and os.path.isfile(env_path):
+            return env_path
+
+        candidates = ["google-chrome", "chromium", "chromium-browser", "chrome"]
+        for name in candidates:
+            path = shutil.which(name)
+            if path:
+                return path
+
+        return None
     
     def navigate_to_url(self, url: str) -> bool:
         if not self.driver:
