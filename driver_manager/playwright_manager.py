@@ -2,23 +2,26 @@ import logging
 import random
 import tempfile
 import os
+import time
+import json
+import re
 from typing import Optional
 from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
 from config.settings import settings
 from utils.proxy_manager import proxy_manager, ProxyInfo
 import zipfile
-import json
+import shutil
 
 logger = logging.getLogger(__name__)
 
 
-class SyncPlaywrightManager:
+class PlaywrightManager:
     def __init__(self):
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self.proxy: Optional[ProxyInfo] = None
-        self._proxy_auth_zip: Optional[str] = None
+        self._proxy_auth_dir: Optional[str] = None
         self._user_data_dir: Optional[str] = None
         self.playwright = None
 
@@ -37,12 +40,12 @@ class SyncPlaywrightManager:
         ]
         return random.choice(user_agents)
 
-    def create_proxy_extension(self, proxy: ProxyInfo) -> str:
-        """Создает расширение для прокси с авторизацией"""
+    def create_proxy_auth_extension(self, proxy: ProxyInfo) -> str:
+        """Создает расширение для прокси с авторизацией (Manifest V2)"""
         manifest_json = {
             "version": "1.0.0",
             "manifest_version": 2,
-            "name": "Proxy Auth Extension",
+            "name": "Proxy Auth Helper",
             "permissions": ["proxy", "webRequest", "webRequestBlocking", "<all_urls>"],
             "background": {
                 "scripts": ["background.js"]
@@ -79,70 +82,71 @@ class SyncPlaywrightManager:
 
         # Создаем временную директорию для расширения
         temp_dir = tempfile.mkdtemp(prefix="proxy_ext_")
-        extension_path = os.path.join(temp_dir, "proxy_auth.zip")
 
-        with zipfile.ZipFile(extension_path, 'w') as zp:
-            zp.writestr("manifest.json", json.dumps(manifest_json, indent=2))
-            zp.writestr("background.js", background_js)
+        with open(os.path.join(temp_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(manifest_json, indent=2))
 
-        self._proxy_auth_zip = extension_path
-        return extension_path
+        with open(os.path.join(temp_dir, "background.js"), "w", encoding="utf-8") as f:
+            f.write(background_js)
+
+        self._proxy_auth_dir = temp_dir
+        logger.info(f"Created proxy auth extension at {temp_dir}")
+        return temp_dir
 
     def setup_driver(self):
         """Настраивает и запускает браузер"""
-        self.playwright = sync_playwright().start()
-
-        # Настройка параметров запуска
-        launch_options = {
-            "headless": settings.HEADLESS,
-            "args": [
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-                f"--window-size={random.randint(1200, 1920)},{random.randint(800, 1080)}",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--disable-site-isolation-trials",
-                "--disable-background-timer-throttling",
-                "--disable-renderer-backgrounding",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-ipc-flooding-protection",
-                "--disable-hang-monitor",
-                "--disable-popup-blocking",
-                "--disable-prompt-on-repost",
-                "--disable-client-side-phishing-detection",
-                "--disable-component-update",
-                "--disable-default-apps",
-                "--disable-domain-reliability",
-                "--disable-sync",
-                "--disable-breakpad",
-                "--password-store=basic",
-                "--use-mock-keychain",
-                "--disable-infobars",
-                "--lang=ru-RU,ru"
-            ]
-        }
-
-        # Выбираем прокси
-        self.proxy = proxy_manager.get_random_proxy()
-        proxy_extension = None
-
-        if self.proxy:
-            # Создаем расширение для прокси
-            proxy_extension = self.create_proxy_extension(self.proxy)
-            launch_options["args"].append(f"--disable-extensions-except={proxy_extension}")
-            launch_options["args"].append(f"--load-extension={proxy_extension}")
-            logger.info(f"Using proxy: {self.proxy.host}:{self.proxy.port}")
-
-        # User-Agent
-        user_agent = self.get_random_user_agent()
-        launch_options["args"].append(f"--user-agent={user_agent}")
-
-        # Профиль пользователя
-        self._user_data_dir = tempfile.mkdtemp(prefix="playwright_profile_")
-        launch_options["args"].append(f"--user-data-dir={self._user_data_dir}")
-
         try:
+            self.playwright = sync_playwright().start()
+
+            # Настройка параметров запуска
+            launch_options = {
+                "headless": settings.HEADLESS,
+                "args": [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    f"--window-size={random.randint(1200, 1920)},{random.randint(800, 1080)}",
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--disable-site-isolation-trials",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-ipc-flooding-protection",
+                    "--disable-hang-monitor",
+                    "--disable-popup-blocking",
+                    "--disable-prompt-on-repost",
+                    "--disable-client-side-phishing-detection",
+                    "--disable-component-update",
+                    "--disable-default-apps",
+                    "--disable-domain-reliability",
+                    "--disable-sync",
+                    "--disable-breakpad",
+                    "--password-store=basic",
+                    "--use-mock-keychain",
+                    "--disable-infobars",
+                    "--lang=ru-RU,ru"
+                ]
+            }
+
+            # Выбираем прокси
+            self.proxy = proxy_manager.get_random_proxy()
+
+            if self.proxy:
+                # Создаем расширение для прокси
+                proxy_extension = self.create_proxy_auth_extension(self.proxy)
+                launch_options["args"].append(f"--disable-extensions-except={proxy_extension}")
+                launch_options["args"].append(f"--load-extension={proxy_extension}")
+                logger.info(f"Using proxy: {self.proxy.host}:{self.proxy.port}")
+
+            # User-Agent
+            user_agent = self.get_random_user_agent()
+            launch_options["args"].append(f"--user-agent={user_agent}")
+
+            # Профиль пользователя
+            self._user_data_dir = tempfile.mkdtemp(prefix="playwright_profile_")
+            launch_options["args"].append(f"--user-data-dir={self._user_data_dir}")
+
             # Запускаем браузер
             self.browser = self.playwright.chromium.launch(**launch_options)
 
@@ -180,14 +184,6 @@ class SyncPlaywrightManager:
                 Object.defineProperty(navigator, 'languages', {
                     get: () => ['ru-RU', 'ru', 'en-US', 'en']
                 });
-
-                // Патчим permissions
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                        Promise.resolve({ state: Notification.permission }) :
-                        originalQuery(parameters)
-                );
             """)
 
             # Создаем страницу
@@ -206,9 +202,6 @@ class SyncPlaywrightManager:
                 "Cache-Control": "max-age=0"
             })
 
-            # Включаем JavaScript
-            self.page.route("**/*", self.block_undesired_resources)
-
             logger.info("Playwright browser setup completed successfully")
 
             # Проверяем IP
@@ -220,14 +213,6 @@ class SyncPlaywrightManager:
             logger.error(f"Failed to setup browser: {e}")
             self.close()
             raise
-
-    def block_undesired_resources(self, route):
-        """Блокирует нежелательные ресурсы для ускорения загрузки"""
-        resource_type = route.request.resource_type
-        if resource_type in ["image", "media", "font", "stylesheet"]:
-            route.abort()
-        else:
-            route.continue_()
 
     def check_ip(self):
         """Проверяет внешний IP адрес"""
@@ -246,7 +231,6 @@ class SyncPlaywrightManager:
 
                 # Имитируем человеческую задержку
                 if attempt > 0:
-                    import time
                     time.sleep(random.uniform(2, 5))
 
                 # Переходим по URL
@@ -275,7 +259,6 @@ class SyncPlaywrightManager:
             except Exception as e:
                 logger.error(f"Navigation error (attempt {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(random.uniform(3, 7))
                     continue
                 return False
@@ -402,8 +385,6 @@ class SyncPlaywrightManager:
     def extract_json_from_html(self, html_content: str) -> Optional[str]:
         """Извлекает JSON из HTML"""
         try:
-            import re
-
             # Ищем в script тегах
             script_pattern = r'<script[^>]*>\s*window\.__APP_STATE__\s*=\s*(\{.*?\})\s*</script>'
             script_match = re.search(script_pattern, html_content, re.DOTALL | re.IGNORECASE)
@@ -451,11 +432,10 @@ class SyncPlaywrightManager:
                 self.playwright = None
 
             # Чистим временные файлы
-            if self._proxy_auth_zip and os.path.exists(self._proxy_auth_zip):
-                os.remove(self._proxy_auth_zip)
+            if self._proxy_auth_dir and os.path.exists(self._proxy_auth_dir):
+                shutil.rmtree(self._proxy_auth_dir, ignore_errors=True)
 
             if self._user_data_dir and os.path.exists(self._user_data_dir):
-                import shutil
                 shutil.rmtree(self._user_data_dir, ignore_errors=True)
 
             logger.info("Playwright browser closed successfully")
