@@ -235,7 +235,8 @@ class SeleniumManager:
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
-
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
@@ -279,7 +280,7 @@ class SeleniumManager:
             options=chrome_options,
             browser_executable_path=chrome_binary if chrome_binary else None
         )
-
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
@@ -322,12 +323,15 @@ class SeleniumManager:
             self.driver.get(url)
 
             # Минимальная задержка для API
-            time.sleep(random.uniform(0.3, 0.8))
+            time.sleep(random.uniform(3, 7))
 
             try:
                 title = self.driver.title
             except Exception:
                 title = "<no title>"
+
+            driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
+            time.sleep(random.uniform(2, 4))
 
             current_url = None
             body_snippet = None
