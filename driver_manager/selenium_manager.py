@@ -28,48 +28,39 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
 
-    def build_proxy_auth_extension(self) -> str:
-        """
-        Создаёт Chrome-расширение (Manifest V3), которое автоматически
-        подставляет proxy-логин/пароль через onAuthRequired.
-        Возвращает путь к .zip файлу расширения.
-        """
+    @staticmethod
+    def build_proxy_auth_extension(username: str, password: str) -> str:
+        """Создаёт Chrome-расширение (Manifest V3) для авторизации прокси."""
 
-        # Манифест для MV3
-        manifest_json = f"""
-    {{
-      "name": "Proxy Auth Helper",
-      "description": "Auto-auth for HTTP proxy",
-      "version": "1.0.0",
+        manifest_json = """{
       "manifest_version": 3,
+      "name": "Proxy Auth",
+      "version": "1.0",
       "permissions": [
         "proxy",
-        "storage",
         "webRequest",
         "webRequestAuthProvider"
       ],
       "host_permissions": [
         "<all_urls>"
       ],
-      "background": {{
+      "background": {
         "service_worker": "background.js"
-      }}
-    }}
-    """
+      }
+    }"""
 
-        # background.js: всегда отдаём одни и те же креды
         background_js = f"""
     chrome.webRequest.onAuthRequired.addListener(
-      (details, callback) => {{
-        callback({{
+      function(details) {{
+        return {{
           authCredentials: {{
-            username: "{self.proxy.login}",
-            password: "{self.proxy.password}"
+            username: "{username}",
+            password: "{password}"
           }}
-        }});
+        }};
       }},
-      {{ urls: ["<all_urls>"] }},
-      ["asyncBlocking"]
+      {{urls: ["<all_urls>"]}},
+      ["blocking"]
     );
     """
 
@@ -91,11 +82,19 @@ class SeleniumManager:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--allow-running-insecure-content")
+
+        # Отключить автоматизационные флаги
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
 
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/130.0.6723.59 Safari/537.36"
+            "Chrome/143.0.0.0 Safari/537.36"
         )
 
         chrome_binary = self._find_chrome_binary()
@@ -108,13 +107,11 @@ class SeleniumManager:
 
         self.proxy = proxy_manager.get_random_proxy()
 
-        self.proxy = proxy_manager.get_random_proxy()
-
         if self.proxy:
             chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
 
             # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
-            proxy_ext_path = self.build_proxy_auth_extension()
+            proxy_ext_path = self.build_proxy_auth_extension(self.proxy.login, self.proxy.password)
             chrome_options.add_extension(proxy_ext_path)
 
             logger.info("Using proxy %s", self.proxy.browser_proxy)
@@ -148,40 +145,40 @@ class SeleniumManager:
                 return path
 
         return None
-    
+
     def navigate_to_url(self, url: str) -> bool:
         if not self.driver:
             logger.error("Driver not initialized")
             return False
-        
+
         try:
             logger.info(f"Navigating to: {url}")
             self.driver.get(url)
-            
+
             # Минимальная задержка для API
             time.sleep(random.uniform(0.3, 0.8))
-            
+
             # Быстрая проверка блокировки только по заголовку
             if "Access denied" in self.driver.title or "Cloudflare" in self.driver.title:
                 logger.warning("Detected anti-bot protection")
                 return False
-            
+
             return True
-            
+
         except TimeoutException:
             logger.error(f"Timeout while loading: {url}")
             return False
         except WebDriverException as e:
             logger.error(f"WebDriver error: {e}")
             return False
-    
+
     def is_blocked(self) -> bool:
         """
         Check if we're blocked by anti-bot protection
         """
         if not self.driver:
             return True
-            
+
         try:
             # Common anti-bot indicators
             blocked_indicators = [
@@ -191,18 +188,18 @@ class SeleniumManager:
                 "access denied",
                 "blocked"
             ]
-            
+
             page_source = self.driver.page_source.lower()
-            
+
             for indicator in blocked_indicators:
                 if indicator in page_source:
                     return True
-                    
+
             return False
-            
+
         except Exception:
             return True
-    
+
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
         if not self.driver:
             return None
@@ -266,33 +263,31 @@ class SeleniumManager:
             logger.error(f"Error waiting for JSON response: {e}")
             return None
 
-
-    
     def extract_json_from_html(self, html_content: str) -> Optional[str]:
         try:
             import re
-            
+
             pre_pattern = r'<pre[^>]*>(.*?)</pre>'
             pre_match = re.search(pre_pattern, html_content, re.DOTALL | re.IGNORECASE)
-            
+
             if pre_match:
                 json_content = pre_match.group(1).strip()
                 logger.debug("Found JSON in <pre> tag")
                 return json_content
-            
+
             # Если не нашли в <pre>, попробуем найти JSON напрямую
             # Ищем первую открывающую скобку до последней закрывающей
             first_brace = html_content.find('{')
             last_brace = html_content.rfind('}')
-            
+
             if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
                 json_content = html_content[first_brace:last_brace + 1]
                 logger.debug("Found JSON by brace search")
                 return json_content
-            
+
             logger.debug("No JSON found in HTML content")
             return None
-            
+
         except Exception as e:
             logger.error(f"Error extracting JSON from HTML: {e}")
             return None
@@ -303,22 +298,22 @@ class SeleniumManager:
         """
         if not self.driver:
             return
-            
+
         try:
             content = self.driver.page_source
             logger.info(f"Page content length: {len(content)}")
             logger.info(f"Content starts with: {content[:200]}")
-            
+
             # Проверяем наличие <pre> тега
             if '<pre' in content.lower():
                 logger.info("Page contains <pre> tag")
-                
+
                 # Попробуем извлечь JSON
                 json_content = self.extract_json_from_html(content)
                 if json_content:
                     logger.info(f"Extracted JSON length: {len(json_content)}")
                     logger.info(f"JSON starts with: {json_content[:100]}")
-                    
+
                     try:
                         data = json.loads(json_content)
                         if 'widgetStates' in data:
@@ -332,21 +327,21 @@ class SeleniumManager:
                         logger.info(f"Extracted content is not valid JSON: {e}")
                 else:
                     logger.info("Could not extract JSON from <pre> tag")
-            
+
             # Проверяем наличие JavaScript
             if 'script' in content.lower():
                 logger.info("Page contains JavaScript")
-            
+
             # Проверяем, есть ли уже JSON напрямую
             stripped_content = content.strip()
             if stripped_content.startswith('{'):
                 logger.info("Page contains direct JSON structure")
             else:
                 logger.info("Page contains HTML wrapper")
-                
+
         except Exception as e:
             logger.error(f"Error in debug: {e}")
-    
+
     def close(self):
         """
         Close driver and cleanup
