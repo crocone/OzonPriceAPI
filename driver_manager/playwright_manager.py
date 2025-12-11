@@ -118,9 +118,9 @@ class PlaywrightSyncManager:
             user_agent = self.get_random_user_agent()
             launch_options["args"].append(f"--user-agent={user_agent}")
 
-            # Профиль пользователя
-            self._user_data_dir = tempfile.mkdtemp(prefix="playwright_profile_")
-            launch_options["args"].append(f"--user-data-dir={self._user_data_dir}")
+            # ❌ УБРАТЬ профиль пользователя через --user-data-dir
+            # self._user_data_dir = tempfile.mkdtemp(prefix="playwright_profile_")
+            # launch_options["args"].append(f"--user-data-dir={self._user_data_dir}")
 
             # Запускаем браузер
             self.browser = self.playwright.chromium.launch(**launch_options)
