@@ -28,39 +28,48 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
 
-    @staticmethod
-    def build_proxy_auth_extension(username: str, password: str) -> str:
-        """Создаёт Chrome-расширение (Manifest V3) для авторизации прокси."""
+    def build_proxy_auth_extension(self) -> str:
+        """
+        Создаёт Chrome-расширение (Manifest V3), которое автоматически
+        подставляет proxy-логин/пароль через onAuthRequired.
+        Возвращает путь к .zip файлу расширения.
+        """
 
-        manifest_json = """{
+        # Манифест для MV3
+        manifest_json = f"""
+    {{
+      "name": "Proxy Auth Helper",
+      "description": "Auto-auth for HTTP proxy",
+      "version": "1.0.0",
       "manifest_version": 3,
-      "name": "Proxy Auth",
-      "version": "1.0",
       "permissions": [
         "proxy",
+        "storage",
         "webRequest",
         "webRequestAuthProvider"
       ],
       "host_permissions": [
         "<all_urls>"
       ],
-      "background": {
+      "background": {{
         "service_worker": "background.js"
-      }
-    }"""
+      }}
+    }}
+    """
 
+        # background.js: всегда отдаём одни и те же креды
         background_js = f"""
     chrome.webRequest.onAuthRequired.addListener(
-      function(details) {{
-        return {{
+      (details, callback) => {{
+        callback({{
           authCredentials: {{
-            username: "{username}",
-            password: "{password}"
+            username: "{self.proxy.login}",
+            password: "{self.proxy.password}"
           }}
-        }};
+        }});
       }},
-      {{urls: ["<all_urls>"]}},
-      ["blocking"]
+      {{ urls: ["<all_urls>"] }},
+      ["asyncBlocking"]
     );
     """
 
@@ -88,13 +97,14 @@ class SeleniumManager:
         chrome_options.add_argument("--allow-running-insecure-content")
 
         # Отключить автоматизационные флаги
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        # chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+
 
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/143.0.0.0 Safari/537.36"
+            "Chrome/130.0.6723.59 Safari/537.36"
         )
 
         chrome_binary = self._find_chrome_binary()
@@ -111,7 +121,7 @@ class SeleniumManager:
             chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
 
             # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
-            proxy_ext_path = self.build_proxy_auth_extension(self.proxy.login, self.proxy.password)
+            proxy_ext_path = self.build_proxy_auth_extension()
             chrome_options.add_extension(proxy_ext_path)
 
             logger.info("Using proxy %s", self.proxy.browser_proxy)
@@ -262,6 +272,8 @@ class SeleniumManager:
         except Exception as e:
             logger.error(f"Error waiting for JSON response: {e}")
             return None
+
+
 
     def extract_json_from_html(self, html_content: str) -> Optional[str]:
         try:
