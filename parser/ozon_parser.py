@@ -157,31 +157,34 @@ class OzonWorker:
         Делает скрин всей страницы и выполняет пробный JS.
         """
         if not self.driver:
-            logger.warning(f"Worker {self.worker_id}: no page object to handle blocked page")
+            logger.warning(f"Worker {self.worker_id}: no driver to handle blocked page")
             return
 
         try:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"blocked_{context}_{timestamp}.png"
 
-            # 1. Full-page скриншот
-            self.driver.screenshot(path=filename, full_page=True)
+            # 1. Скриншот (видимая область)
+            # Для Selenium
+            self.driver.save_screenshot(filename)
             logger.warning(
                 f"Worker {self.worker_id}: blocked page screenshot saved to {filename} (context={context})"
             )
 
-            # 2. Выполняем какой-нибудь JS (пока просто для отладки)
+            # 2. Выполняем JS — возвращаем полезную инфу о странице
             try:
-                info = self.driver.evaluate(
-                    """() => ({
+                info = self.driver.execute_script(
+                    """
+                    return {
                         url: window.location.href,
                         ua: navigator.userAgent,
                         title: document.title
-                    })"""
+                    };
+                    """
                 )
                 logger.warning(
-                    f"Worker {self.worker_id}: blocked page info: url={info['url']}, "
-                    f"title={info['title']}, ua={info['ua']}"
+                    f"Worker {self.worker_id}: blocked page info: "
+                    f"url={info['url']}, title={info['title']}, ua={info['ua']}"
                 )
             except Exception as e:
                 logger.debug(
