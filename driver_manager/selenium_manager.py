@@ -91,9 +91,12 @@ class SeleniumManager:
         )
 
         # Отключаем логирование и автоматизацию через experimental_option
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-logging", "enable-automation"])
+        chrome_options.add_argument("--disable-logging")
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_experimental_option('useAutomationExtension', False)
-
+        chrome_options.add_argument('--no-first-run')
+        chrome_options.add_argument('--no-service-autorun')
+        chrome_options.add_argument('--password-store=basic')
         # Дополнительные опции для избежания детекции
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_argument('--disable-infobars')
