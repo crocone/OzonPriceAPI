@@ -4,7 +4,6 @@ from fastapi import APIRouter, HTTPException, status
 from models.schemas import ArticlesRequest, ParseResponse, ArticleResult
 from parser.ozon_parser import OzonParser
 from typing import List
-from fastapi.concurrency import run_in_threadpool
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,9 @@ async def get_price(request: ArticlesRequest):
         # Get parser instance
         parser = get_parser()
 
-        results = await run_in_threadpool(parser.parse_articles, request.articles)
+        # Parse articles
+        results = parser.parse_articles(request.articles)
+
         # Calculate timing
         end_time = time.time()
         total_time = end_time - start_time
