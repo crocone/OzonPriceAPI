@@ -89,7 +89,7 @@ class SeleniumManager:
 
         # Отключить автоматизационные флаги
         # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
+        # chrome_options.add_experimental_option('useAutomationExtension', False)
 
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
