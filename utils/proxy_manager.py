@@ -19,7 +19,7 @@ class ProxyInfo:
     @property
     def browser_proxy(self) -> str:
         # То, что можно безопасно передавать в --proxy-server
-        return f"http://{self.host}:{self.port}"
+        return f"https://{self.host}:{self.port}"
 
 
 
