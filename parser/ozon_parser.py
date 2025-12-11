@@ -156,7 +156,7 @@ class OzonWorker:
         Вызывается когда страница, скорее всего, заблокирована (капча / enable JS / антибот).
         Делает скрин всей страницы и выполняет пробный JS.
         """
-        if not self.page:
+        if not self.driver:
             logger.warning(f"Worker {self.worker_id}: no page object to handle blocked page")
             return
 
@@ -165,14 +165,14 @@ class OzonWorker:
             filename = f"blocked_{context}_{timestamp}.png"
 
             # 1. Full-page скриншот
-            self.page.screenshot(path=filename, full_page=True)
+            self.driver.screenshot(path=filename, full_page=True)
             logger.warning(
                 f"Worker {self.worker_id}: blocked page screenshot saved to {filename} (context={context})"
             )
 
             # 2. Выполняем какой-нибудь JS (пока просто для отладки)
             try:
-                info = self.page.evaluate(
+                info = self.driver.evaluate(
                     """() => ({
                         url: window.location.href,
                         ua: navigator.userAgent,
