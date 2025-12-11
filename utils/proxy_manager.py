@@ -17,12 +17,10 @@ class ProxyInfo:
     password: str
 
     @property
-    def proxy_url(self) -> str:
-        return f"http://{self.login}:{self.password}@{self.host}:{self.port}"
+    def browser_proxy(self) -> str:
+        # То, что можно безопасно передавать в --proxy-server
+        return f"http://{self.host}:{self.port}"
 
-    @property
-    def safe_label(self) -> str:
-        return f"{self.host}:{self.port}"
 
 
 class ProxyManager:

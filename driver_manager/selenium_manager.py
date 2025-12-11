@@ -13,6 +13,8 @@ import time
 import json
 import random
 import os
+import zipfile
+import tempfile
 import shutil
 import undetected_chromedriver as uc
 from utils.proxy_manager import proxy_manager, ProxyInfo
@@ -25,6 +27,60 @@ class SeleniumManager:
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
+
+    def build_proxy_auth_extension(username: str, password: str) -> str:
+        """
+        Создаёт Chrome-расширение (Manifest V3), которое автоматически
+        подставляет proxy-логин/пароль через onAuthRequired.
+        Возвращает путь к .zip файлу расширения.
+        """
+
+        # Манифест для MV3
+        manifest_json = f"""
+    {{
+      "name": "Proxy Auth Helper",
+      "description": "Auto-auth for HTTP proxy",
+      "version": "1.0.0",
+      "manifest_version": 3,
+      "permissions": [
+        "proxy",
+        "storage",
+        "webRequest",
+        "webRequestAuthProvider"
+      ],
+      "host_permissions": [
+        "<all_urls>"
+      ],
+      "background": {{
+        "service_worker": "background.js"
+      }}
+    }}
+    """
+
+        # background.js: всегда отдаём одни и те же креды
+        background_js = f"""
+    chrome.webRequest.onAuthRequired.addListener(
+      (details, callback) => {{
+        callback({{
+          authCredentials: {{
+            username: "{username}",
+            password: "{password}"
+          }}
+        }});
+      }},
+      {{ urls: ["<all_urls>"] }},
+      ["asyncBlocking"]
+    );
+    """
+
+        tmp_dir = tempfile.mkdtemp(prefix="chrome_proxy_auth_")
+        plugin_path = os.path.join(tmp_dir, "proxy_auth_plugin.zip")
+
+        with zipfile.ZipFile(plugin_path, "w") as zp:
+            zp.writestr("manifest.json", manifest_json)
+            zp.writestr("background.js", background_js)
+
+        return plugin_path
 
     def setup_driver(self):
         chrome_options = uc.ChromeOptions()
@@ -52,9 +108,19 @@ class SeleniumManager:
 
         self.proxy = proxy_manager.get_random_proxy()
 
+        self.proxy = proxy_manager.get_random_proxy()
+
         if self.proxy:
-            chrome_options.add_argument(f"--proxy-server={self.proxy.proxy_url}")
-            logger.info("Using proxy %s", self.proxy.safe_label)
+            chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
+
+            # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
+            proxy_ext_path = build_proxy_auth_extension(
+                username=self.proxy.login,
+                password=self.proxy.password,
+            )
+            chrome_options.add_extension(proxy_ext_path)
+
+            logger.info("Using proxy %s via %s", self.proxy.safe_label, proxy_host_port)
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
