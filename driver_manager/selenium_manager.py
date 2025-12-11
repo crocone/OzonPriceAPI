@@ -96,6 +96,7 @@ class SeleniumManager:
     def log_current_ip(self, tag: str = ""):
         """
         Логируем внешний IP, с которого Chromium ходит в интернет (через прокси).
+        Использует execute_async_script, чтобы дождаться fetch.
         """
         if not self.driver:
             logger.warning("log_current_ip called but driver is None")
@@ -103,12 +104,13 @@ class SeleniumManager:
 
         try:
             script = """
-                return fetch('https://api.ipify.org?format=json')
-                  .then(r => r.json())
-                  .then(d => d.ip)
-                  .catch(() => null);
+                var done = arguments[0];
+                fetch('https://api.ipify.org?format=json')
+                  .then(function(r) { return r.json(); })
+                  .then(function(d) { done(d.ip); })
+                  .catch(function(e) { done(null); });
             """
-            ip = self.driver.execute_script(script)
+            ip = self.driver.execute_async_script(script)
 
             if ip:
                 if tag:
@@ -119,7 +121,6 @@ class SeleniumManager:
                 logger.warning("Could not detect outbound IP (%s): got null", tag)
         except Exception as e:
             logger.warning("Failed to detect outbound IP (%s): %s", tag, e)
-
 
     def build_proxy_auth_extension(self) -> str:
         """
