@@ -93,6 +93,40 @@ class SeleniumManager:
 
         return tmp_dir
 
+
+    def detect_ip_via_page(self, tag: str = ""):
+        """
+        Отдельная навигация на сервис, который отдаёт IP в теле ответа,
+        чтение этого IP через document.body.innerText.
+        Это обходит проблемы с fetch/cors и даёт 100% картину именно из браузера.
+        """
+        if not self.driver:
+            logger.warning("detect_ip_via_page called but driver is None")
+            return
+
+        test_url = "https://api.ipify.org?format=text"  # можно поменять на другой сервис, если этот блочится
+
+        try:
+            logger.info("Navigating to IP check page: %s", test_url)
+            self.driver.get(test_url)
+
+            # дадим странице чуть времени
+            import time
+            time.sleep(1.0)
+
+            ip_text = self.driver.execute_script(
+                "return document.body && document.body.innerText ? document.body.innerText.trim() : '';"
+            )
+
+            if ip_text:
+                logger.info("Outbound IP via page (%s): %s", tag, ip_text)
+            else:
+                logger.warning("Could not read IP text from page (%s)", tag)
+
+        except Exception as e:
+            logger.warning("Failed to detect IP via page (%s): %s", tag, e)
+
+
     def log_current_ip(self, tag: str = ""):
         """
         Логируем внешний IP, с которого Chromium ходит в интернет (через прокси).
@@ -252,6 +286,8 @@ class SeleniumManager:
 
         # Можно оставить сразу после инициализации:
         self.log_current_ip(tag="after driver init")
+
+        self.detect_ip_via_page(tag="after driver init")
 
         return driver
 
