@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Proxy settings
     ENABLE_PROXY: bool = True
     PROXY_LIST_PATH: str = "config/proxies.txt"
+    CHROME_BINARY: Optional[str] = None
 
     class Config:
         env_file = ".env"
