@@ -33,10 +33,6 @@ class OzonParser:
         total_articles = len(articles)
         logger.info(f"Starting to parse {total_articles} articles")
 
-        if total_articles <= self.MIN_ARTICLES_PER_WORKER:
-            logger.info("Using single worker for small batch")
-            return self._parse_with_single_worker(articles)
-
         worker_groups = self._calculate_optimal_workers(articles)
         logger.info(f"Using {len(worker_groups)} workers for {total_articles} articles")
 
