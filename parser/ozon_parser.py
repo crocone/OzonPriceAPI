@@ -4,8 +4,7 @@ import time
 import random
 import concurrent.futures
 from typing import List, Optional
-# Замените импорт SeleniumManager на PlaywrightManager
-from driver_manager.playwright_manager import PlaywrightManager
+from driver_manager.playwright_manager import SyncPlaywrightWrapper  # Используем обертку
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
 from utils.helpers import (
     build_ozon_api_url,
@@ -24,22 +23,20 @@ class OzonParser:
     def __init__(self):
         self.MAX_WORKERS = settings.MAX_WORKERS
         self.MIN_ARTICLES_PER_WORKER = settings.MAX_ARTICLES_PER_WORKER
-        self.TARGET_TIME_SECONDS = 90  # 1.5 минуты
-        self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
+        self.TARGET_TIME_SECONDS = 90
+        self.ESTIMATED_TIME_PER_ARTICLE = 6
 
     def initialize(self):
         logger.info("Ozon parser initialized successfully")
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         total_articles = len(articles)
-        logger.info(f"Starting to parse {total_articles} articles with target time {self.TARGET_TIME_SECONDS}s")
+        logger.info(f"Starting to parse {total_articles} articles")
 
         if total_articles <= self.MIN_ARTICLES_PER_WORKER:
-            # Мало артикулов - используем один воркер
             logger.info("Using single worker for small batch")
             return self._parse_with_single_worker(articles)
 
-        # Рассчитываем оптимальное количество воркеров
         worker_groups = self._calculate_optimal_workers(articles)
         logger.info(f"Using {len(worker_groups)} workers for {total_articles} articles")
 
@@ -47,22 +44,15 @@ class OzonParser:
 
     def _calculate_optimal_workers(self, articles: List[int]) -> List[List[int]]:
         total_articles = len(articles)
-
-        # Рассчитываем сколько воркеров нужно для укладывания в 1.5 минуты
         estimated_total_time = total_articles * self.ESTIMATED_TIME_PER_ARTICLE
         needed_workers = max(1, int(estimated_total_time / self.TARGET_TIME_SECONDS))
-
-        # Ограничиваем максимальным количеством воркеров
         optimal_workers = min(needed_workers, self.MAX_WORKERS)
 
-        # Убеждаемся что в каждом воркере минимум 3 артикула (кроме остатка)
         if total_articles / optimal_workers < self.MIN_ARTICLES_PER_WORKER:
             optimal_workers = max(1, total_articles // self.MIN_ARTICLES_PER_WORKER)
 
-        logger.info(f"Calculated optimal workers: {optimal_workers} for {total_articles} articles")
-        logger.info(f"Estimated time per worker: {estimated_total_time / optimal_workers:.1f}s")
+        logger.info(f"Calculated optimal workers: {optimal_workers}")
 
-        # Распределяем артикулы по воркерам
         articles_per_worker = total_articles // optimal_workers
         remainder = total_articles % optimal_workers
 
@@ -70,13 +60,10 @@ class OzonParser:
         start_idx = 0
 
         for i in range(optimal_workers):
-            # Добавляем по одному дополнительному артикулу первым воркерам для остатка
             current_batch_size = articles_per_worker + (1 if i < remainder else 0)
             end_idx = start_idx + current_batch_size
-
             worker_group = articles[start_idx:end_idx]
             worker_groups.append(worker_group)
-
             logger.info(f"Worker {i + 1}: {len(worker_group)} articles")
             start_idx = end_idx
 
@@ -95,13 +82,11 @@ class OzonParser:
         start_time = time.time()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(worker_groups)) as executor:
-            # Запускаем все воркеры параллельно
             futures = []
             for i, group in enumerate(worker_groups):
                 future = executor.submit(self._parse_worker_group, group, i + 1)
                 futures.append(future)
 
-            # Собираем результаты по мере готовности
             all_results = []
             completed = 0
 
@@ -110,15 +95,13 @@ class OzonParser:
                     worker_results = future.result()
                     all_results.extend(worker_results)
                     completed += 1
-
                     elapsed = time.time() - start_time
                     logger.info(f"Worker {completed}/{len(worker_groups)} completed in {elapsed:.1f}s")
-
                 except Exception as e:
                     logger.error(f"Worker failed: {e}")
 
         total_time = time.time() - start_time
-        logger.info(f"All workers completed in {total_time:.1f}s (target: {self.TARGET_TIME_SECONDS}s)")
+        logger.info(f"All workers completed in {total_time:.1f}s")
 
         return self._sort_results_by_original_order(all_results, original_articles)
 
@@ -143,7 +126,7 @@ class OzonParser:
 class OzonWorker:
     def __init__(self, worker_id: int = 1):
         self.worker_id = worker_id
-        self.playwright_manager = PlaywrightManager()  # Используем Playwright вместо Selenium
+        self.playwright_manager = SyncPlaywrightWrapper()  # Используем синхронную обертку
         self.page = None
 
     def initialize(self):
