@@ -194,7 +194,7 @@ class OzonWorker:
                         continue
                     return ArticleResult(article=article, success=False, error="Navigation to product page failed")
 
-                time.sleep(5)  # даём озону поставить куки/сессию
+                time.sleep(2)  # даём озону поставить куки/сессию
 
                 # 1) Теперь идём в composer-api
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)

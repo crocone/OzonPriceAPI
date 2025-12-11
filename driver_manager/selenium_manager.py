@@ -18,15 +18,79 @@ import tempfile
 import shutil
 import undetected_chromedriver as uc
 from utils.proxy_manager import proxy_manager, ProxyInfo
+import textwrap
 
 logger = logging.getLogger(__name__)
 
+
+def build_proxy_auth_extension_dir(self, username: str, password: str) -> str:
+    """
+    Создаёт unpacked Chrome-расширение (Manifest V3), которое автоматически
+    подставляет proxy-логин/пароль через onAuthRequired.
+    Возвращает путь к директории расширения.
+    """
+
+    # Манифест для MV3
+    manifest_json = textwrap.dedent(f"""
+    {{
+      "name": "Proxy Auth Helper",
+      "description": "Auto-auth for HTTP proxy",
+      "version": "1.0.0",
+      "manifest_version": 3,
+      "permissions": [
+        "proxy",
+        "storage",
+        "webRequest",
+        "webRequestAuthProvider"
+      ],
+      "host_permissions": [
+        "<all_urls>"
+      ],
+      "background": {{
+        "service_worker": "background.js"
+      }}
+    }}
+    """).strip()
+
+    # background.js: всегда отдаём одни и те же креды
+    background_js = textwrap.dedent(f"""
+    chrome.webRequest.onAuthRequired.addListener(
+      (details, callback) => {{
+        callback({{
+          authCredentials: {{
+            username: "{username}",
+            password: "{password}"
+          }}
+        }});
+      }},
+      {{ urls: ["<all_urls>"] }},
+      ["asyncBlocking"]
+    );
+    """).strip()
+
+    tmp_dir = tempfile.mkdtemp(prefix="chrome_proxy_auth_ext_")
+
+    manifest_path = os.path.join(tmp_dir, "manifest.json")
+    background_path = os.path.join(tmp_dir, "background.js")
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        f.write(manifest_json)
+
+    with open(background_path, "w", encoding="utf-8") as f:
+        f.write(background_js)
+
+    # запомним, чтобы потом удалить
+    self._proxy_ext_dir = tmp_dir
+    logger.info("Proxy auth extension created at %s", tmp_dir)
+
+    return tmp_dir
 
 class SeleniumManager:
     def __init__(self):
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
+        self._proxy_ext_dir: Optional[str] = None
 
     def build_proxy_auth_extension(self) -> str:
         """
@@ -91,6 +155,8 @@ class SeleniumManager:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
+        chrome_options.add_argument("--net-log-capture-mode=Everything")
 
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -109,13 +175,24 @@ class SeleniumManager:
         self.proxy = proxy_manager.get_random_proxy()
 
         if self.proxy:
+            if not self.check_proxy_alive(self.proxy):
+                logger.warning("Selected proxy is not alive, falling back to direct connection")
+                self.proxy = None
+
+        if self.proxy:
+            # 1) направляем трафик через прокси
             chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
 
-            # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
-            proxy_ext_path = self.build_proxy_auth_extension()
-            chrome_options.add_extension(proxy_ext_path)
-
-            logger.info("Using proxy %s", self.proxy.browser_proxy)
+            # 2) расширение с авторизацией (логин/пароль берём из ProxyInfo)
+            try:
+                ext_dir = self.build_proxy_auth_extension_dir(
+                    username=self.proxy.login,
+                    password=self.proxy.password,
+                )
+                chrome_options.add_argument(f"--load-extension={ext_dir}")
+                logger.info("Using proxy %s with auth extension", self.proxy.browser_proxy)
+            except Exception as e:
+                logger.error("Failed to create proxy auth extension: %s", e)
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
@@ -345,6 +422,30 @@ class SeleniumManager:
         except Exception as e:
             logger.error(f"Error in debug: {e}")
 
+    def check_proxy_alive(self, proxy: ProxyInfo, timeout: int = 10) -> bool:
+        """
+        Простейшая проверка прокси через requests.
+        ВАЖНО: структура ProxyInfo может отличаться, адаптируй host/port под свой класс.
+        """
+        import requests
+
+        # пример, если в proxy есть host/port
+        proxy_url = f"http://{proxy.login}:{proxy.password}@{proxy.host}:{proxy.port}"
+
+        proxies = {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
+
+        try:
+            resp = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=timeout)
+            resp.raise_for_status()
+            logger.info("Proxy %s OK, response IP: %s", proxy_url, resp.text)
+            return True
+        except Exception as e:
+            logger.warning("Proxy %s seems dead or unreachable: %s", proxy_url, e)
+            return False
+
     def close(self):
         """
         Close driver and cleanup
@@ -358,3 +459,14 @@ class SeleniumManager:
             finally:
                 self.driver = None
                 self.wait = None
+
+        # чистим временную директорию расширения
+        if self._proxy_ext_dir:
+            try:
+                shutil.rmtree(self._proxy_ext_dir, ignore_errors=True)
+                logger.info("Proxy extension directory %s removed", self._proxy_ext_dir)
+            except Exception as e:
+                logger.error("Error removing proxy extension directory %s: %s",
+                             self._proxy_ext_dir, e)
+            finally:
+                self._proxy_ext_dir = None
