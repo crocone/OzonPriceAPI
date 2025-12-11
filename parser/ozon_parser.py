@@ -148,8 +148,12 @@ class OzonWorker:
                 logger.info(f"Worker {self.worker_id}: Ozon warmed up")
             else:
                 logger.warning(f"Worker {self.worker_id}: Failed to warm up Ozon")
+                # <<< добавляем
+                self.handle_blocked_page(context="warmup")
         except Exception as e:
             logger.debug(f"Worker {self.worker_id}: Error warming up: {e}")
+            # На случай, если упало внутри navigate_to_url – тоже попробуем снять скрин
+            self.handle_blocked_page(context="warmup_exception")
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         if not self.page:
@@ -178,6 +182,46 @@ class OzonWorker:
 
         return results
 
+    def handle_blocked_page(self, context: str = "unknown"):
+        """
+        Вызывается когда страница, скорее всего, заблокирована (капча / enable JS / антибот).
+        Делает скрин всей страницы и выполняет пробный JS.
+        """
+        if not self.page:
+            logger.warning(f"Worker {self.worker_id}: no page object to handle blocked page")
+            return
+
+        try:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"blocked_{context}_{timestamp}.png"
+
+            # 1. Full-page скриншот
+            self.page.screenshot(path=filename, full_page=True)
+            logger.warning(
+                f"Worker {self.worker_id}: blocked page screenshot saved to {filename} (context={context})"
+            )
+
+            # 2. Выполняем какой-нибудь JS (пока просто для отладки)
+            try:
+                info = self.page.evaluate(
+                    """() => ({
+                        url: window.location.href,
+                        ua: navigator.userAgent,
+                        title: document.title
+                    })"""
+                )
+                logger.warning(
+                    f"Worker {self.worker_id}: blocked page info: url={info['url']}, "
+                    f"title={info['title']}, ua={info['ua']}"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"Worker {self.worker_id}: failed to run debug JS on blocked page: {e}"
+                )
+
+        except Exception as e:
+            logger.error(f"Worker {self.worker_id}: failed to handle blocked page: {e}")
+
     def parse_article(self, article: int, max_retries: int = 2) -> ArticleResult:
         """Парсинг одного артикула"""
         for attempt in range(max_retries):
@@ -189,8 +233,13 @@ class OzonWorker:
                 success = self.playwright_manager.navigate_to_url(product_url)
 
                 if not success:
+                    # <<< добавляем: зафиксировать, что именно там
+                    self.handle_blocked_page(context=f"product_{article}_attempt_{attempt + 1}")
+
                     if attempt < max_retries - 1:
-                        logger.debug(f"Retry {attempt + 1} for article {article}: navigation failed")
+                        logger.debug(
+                            f"Retry {attempt + 1} for article {article}: navigation failed"
+                        )
                         time.sleep(random.uniform(2, 3))
                         continue
                     return ArticleResult(
@@ -205,8 +254,13 @@ class OzonWorker:
                 success = self.playwright_manager.navigate_to_url(api_url)
 
                 if not success:
+                    # >>> и здесь на всякий случай (если антибот стоит уже на API)
+                    self.handle_blocked_page(context=f"api_{article}_attempt_{attempt + 1}")
+
                     if attempt < max_retries - 1:
-                        logger.debug(f"Retry {attempt + 1} for article {article}: API navigation failed")
+                        logger.debug(
+                            f"Retry {attempt + 1} for article {article}: API navigation failed"
+                        )
                         time.sleep(random.uniform(2, 3))
                         continue
                     return ArticleResult(
@@ -220,7 +274,9 @@ class OzonWorker:
 
                 if not json_content:
                     if attempt < max_retries - 1:
-                        logger.debug(f"Retry {attempt + 1} for article {article}: no JSON response")
+                        logger.debug(
+                            f"Retry {attempt + 1} for article {article}: no JSON response"
+                        )
                         time.sleep(random.uniform(2, 3))
                         continue
                     return ArticleResult(
@@ -235,7 +291,9 @@ class OzonWorker:
                 if result and result.success:
                     return result
                 elif attempt < max_retries - 1:
-                    logger.debug(f"Retry {attempt + 1} for article {article}: price extraction failed")
+                    logger.debug(
+                        f"Retry {attempt + 1} for article {article}: price extraction failed"
+                    )
                     time.sleep(random.uniform(2, 3))
                     continue
                 else:
@@ -246,6 +304,9 @@ class OzonWorker:
                     )
 
             except Exception as e:
+                # На всякий случай тоже снимем скрин: возможно, ошибка из-за блокировки
+                self.handle_blocked_page(context=f"exception_article_{article}_attempt_{attempt + 1}")
+
                 if attempt < max_retries - 1:
                     logger.debug(f"Retry {attempt + 1} for article {article}: {e}")
                     time.sleep(random.uniform(3, 4))
