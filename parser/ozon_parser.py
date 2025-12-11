@@ -25,10 +25,18 @@ class OzonParser:
         self.MIN_ARTICLES_PER_WORKER = settings.MAX_ARTICLES_PER_WORKER
         self.TARGET_TIME_SECONDS = 90  # 1.5 минуты
         self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
-    
+
     def initialize(self):
-        logger.info("Ozon parser initialized successfully")
-    
+        try:
+            self.driver = self.selenium_manager.setup_driver()
+            logger.info(f"Worker {self.worker_id} initialized successfully")
+
+            # Лог IP именно для этого воркера
+            self.selenium_manager.log_current_ip(tag=f"worker {self.worker_id} init")
+        except Exception as e:
+            logger.error(f"Failed to initialize worker {self.worker_id}: {e}")
+            raise
+
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         total_articles = len(articles)
         logger.info(f"Starting to parse {total_articles} articles with target time {self.TARGET_TIME_SECONDS}s")
@@ -206,7 +214,7 @@ class OzonWorker:
                     return ArticleResult(article=article, success=False, error="Navigation failed")
 
                 # 2) Ждём JSON дольше (10с часто мало на VPS)
-                json_content = self.selenium_manager.wait_for_json_response(timeout=60)
+                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
                 
                 if not json_content:
                     if attempt == 0:

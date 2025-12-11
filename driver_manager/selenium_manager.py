@@ -93,6 +93,33 @@ class SeleniumManager:
 
         return tmp_dir
 
+    def log_current_ip(self, tag: str = ""):
+        """
+        Логируем внешний IP, с которого Chromium ходит в интернет (через прокси).
+        """
+        if not self.driver:
+            logger.warning("log_current_ip called but driver is None")
+            return
+
+        try:
+            script = """
+                return fetch('https://api.ipify.org?format=json')
+                  .then(r => r.json())
+                  .then(d => d.ip)
+                  .catch(() => null);
+            """
+            ip = self.driver.execute_script(script)
+
+            if ip:
+                if tag:
+                    logger.info("Outbound IP (%s): %s", tag, ip)
+                else:
+                    logger.info("Outbound IP: %s", ip)
+            else:
+                logger.warning("Could not detect outbound IP (%s): got null", tag)
+        except Exception as e:
+            logger.warning("Failed to detect outbound IP (%s): %s", tag, e)
+
 
     def build_proxy_auth_extension(self) -> str:
         """
@@ -198,12 +225,19 @@ class SeleniumManager:
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
-        driver = uc.Chrome(options=chrome_options, browser_executable_path=chrome_binary if chrome_binary else None)
+        driver = uc.Chrome(
+            options=chrome_options,
+            browser_executable_path=chrome_binary if chrome_binary else None
+        )
 
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
         logger.info("Chrome driver created successfully")
+
+        # Сразу проверим, какой IP видит мир с точки зрения браузера
+        self.log_current_ip(tag="after driver init")
+
         return driver
 
     def _find_chrome_binary(self) -> Optional[str]:
@@ -232,15 +266,44 @@ class SeleniumManager:
             return False
 
         try:
-            logger.info(f"Navigating to: {url}")
+            logger.info("Navigating to: %s", url)
             self.driver.get(url)
 
             # Минимальная задержка для API
             time.sleep(random.uniform(0.3, 0.8))
 
-            # Быстрая проверка блокировки только по заголовку
-            if "Access denied" in self.driver.title or "Cloudflare" in self.driver.title:
-                logger.warning("Detected anti-bot protection")
+            try:
+                title = self.driver.title
+            except Exception:
+                title = "<no title>"
+
+            current_url = None
+            body_snippet = None
+
+            try:
+                current_url = self.driver.current_url
+                body_snippet = self.driver.execute_script(
+                    "return document.body.innerText.slice(0, 300);"
+                )
+            except Exception as e:
+                logger.debug("Error getting page debug info after navigation: %s", e)
+
+            logger.debug(
+                "After navigation: current_url=%s, title=%r, body_snippet_start=%r",
+                current_url, title, body_snippet
+            )
+
+            # Проверка блокировки
+            if self.is_blocked():
+                logger.warning(
+                    "Detected anti-bot/blocked page. url=%s, title=%r, snippet=%r",
+                    current_url, title, body_snippet
+                )
+                return False
+
+            # Старый быстрый кейс тоже можно оставить
+            if "Access denied" in (title or "") or "Cloudflare" in (title or ""):
+                logger.warning("Detected anti-bot protection by title")
                 return False
 
             return True
@@ -266,13 +329,16 @@ class SeleniumManager:
                 "checking your browser",
                 "enable javascript",
                 "access denied",
-                "blocked"
+                "blocked",
+                "доступ ограничен",
+                "инцидент:"
             ]
 
             page_source = self.driver.page_source.lower()
 
             for indicator in blocked_indicators:
                 if indicator in page_source:
+                    logger.warning("Anti-bot indicator detected: %r", indicator)
                     return True
 
             return False
