@@ -262,8 +262,8 @@ class SeleniumManager:
 
         # Anti-detection
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
+        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+        # chrome_options.add_experimental_option('useAutomationExtension', False)
 
         # User-Agent
         self._current_user_agent = self.get_random_user_agent()
