@@ -88,7 +88,7 @@ class SyncPlaywrightManager:
         self._proxy_auth_zip = extension_path
         return extension_path
 
-    def setup_browser(self):
+    def setup_driver(self):
         """Настраивает и запускает браузер"""
         self.playwright = sync_playwright().start()
 
