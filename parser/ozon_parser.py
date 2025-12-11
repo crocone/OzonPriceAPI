@@ -4,7 +4,7 @@ import time
 import random
 import concurrent.futures
 from typing import List, Optional
-from driver_manager.playwright_manager import SyncPlaywrightWrapper  # Используем обертку
+from driver_manager.playwright_manager import PlaywrightSyncManager  # Импортируем новый менеджер
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
 from utils.helpers import (
     build_ozon_api_url,
@@ -126,11 +126,13 @@ class OzonParser:
 class OzonWorker:
     def __init__(self, worker_id: int = 1):
         self.worker_id = worker_id
-        self.playwright_manager = SyncPlaywrightWrapper()  # Используем синхронную обертку
+        self.playwright_manager = None
         self.page = None
 
     def initialize(self):
         try:
+            # Создаем новый экземпляр менеджера для каждого воркера
+            self.playwright_manager = PlaywrightSyncManager()
             self.page = self.playwright_manager.setup_driver()
 
             # Прогрев: заходим на Ozon
@@ -146,7 +148,7 @@ class OzonWorker:
         try:
             success = self.playwright_manager.navigate_to_url(settings.OZON_BASE_URL)
             if success:
-                time.sleep(random.uniform(3, 5))
+                time.sleep(random.uniform(2, 3))
                 logger.info(f"Worker {self.worker_id}: Ozon warmed up")
             else:
                 logger.warning(f"Worker {self.worker_id}: Failed to warm up Ozon")
@@ -167,14 +169,13 @@ class OzonWorker:
 
             article_time = time.time() - article_start
             elapsed_total = time.time() - start_time
-            avg_time = elapsed_total / i
 
             logger.info(f"Worker {self.worker_id}: {i}/{len(articles)} articles, "
-                        f"current: {article_time:.1f}s, avg: {avg_time:.1f}s")
+                        f"current: {article_time:.1f}s, total: {elapsed_total:.1f}s")
 
             # Пауза между артикулами
             if i < len(articles):
-                time.sleep(random.uniform(1.0, 2.5))
+                time.sleep(random.uniform(1.0, 2.0))
 
         total_time = time.time() - start_time
         logger.info(f"Worker {self.worker_id} completed in {total_time:.1f}s")
@@ -193,32 +194,44 @@ class OzonWorker:
 
                 if not success:
                     if attempt < max_retries - 1:
-                        time.sleep(random.uniform(2, 4))
+                        logger.debug(f"Retry {attempt + 1} for article {article}: navigation failed")
+                        time.sleep(random.uniform(2, 3))
                         continue
-                    return ArticleResult(article=article, success=False,
-                                         error="Failed to navigate to product page")
+                    return ArticleResult(
+                        article=article,
+                        success=False,
+                        error="Failed to navigate to product page"
+                    )
 
-                time.sleep(random.uniform(2, 3))
+                time.sleep(random.uniform(1, 2))
 
                 # 2. Открываем API URL
                 success = self.playwright_manager.navigate_to_url(api_url)
 
                 if not success:
                     if attempt < max_retries - 1:
-                        time.sleep(random.uniform(2, 4))
+                        logger.debug(f"Retry {attempt + 1} for article {article}: API navigation failed")
+                        time.sleep(random.uniform(2, 3))
                         continue
-                    return ArticleResult(article=article, success=False,
-                                         error="Failed to navigate to API")
+                    return ArticleResult(
+                        article=article,
+                        success=False,
+                        error="Failed to navigate to API"
+                    )
 
                 # 3. Ждем JSON
-                json_content = self.playwright_manager.wait_for_json_response(timeout=20)
+                json_content = self.playwright_manager.wait_for_json_response(timeout=15)
 
                 if not json_content:
                     if attempt < max_retries - 1:
-                        time.sleep(random.uniform(2, 4))
+                        logger.debug(f"Retry {attempt + 1} for article {article}: no JSON response")
+                        time.sleep(random.uniform(2, 3))
                         continue
-                    return ArticleResult(article=article, success=False,
-                                         error="No JSON response")
+                    return ArticleResult(
+                        article=article,
+                        success=False,
+                        error="No JSON response"
+                    )
 
                 # 4. Извлекаем данные
                 result = self.extract_price_info(json_content, article)
@@ -226,16 +239,20 @@ class OzonWorker:
                 if result and result.success:
                     return result
                 elif attempt < max_retries - 1:
-                    time.sleep(random.uniform(2, 4))
+                    logger.debug(f"Retry {attempt + 1} for article {article}: price extraction failed")
+                    time.sleep(random.uniform(2, 3))
                     continue
                 else:
-                    return ArticleResult(article=article, success=False,
-                                         error="Failed to extract price info")
+                    return ArticleResult(
+                        article=article,
+                        success=False,
+                        error="Failed to extract price info"
+                    )
 
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.debug(f"Retry {attempt + 1} for article {article}: {e}")
-                    time.sleep(random.uniform(3, 6))
+                    time.sleep(random.uniform(3, 4))
                     continue
                 return ArticleResult(article=article, success=False, error=str(e))
 
