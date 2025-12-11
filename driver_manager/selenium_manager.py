@@ -93,45 +93,10 @@ class SeleniumManager:
 
         return tmp_dir
 
-
-    def detect_ip_via_page(self, tag: str = ""):
-        """
-        Отдельная навигация на сервис, который отдаёт IP в теле ответа,
-        чтение этого IP через document.body.innerText.
-        Это обходит проблемы с fetch/cors и даёт 100% картину именно из браузера.
-        """
-        if not self.driver:
-            logger.warning("detect_ip_via_page called but driver is None")
-            return
-
-        test_url = "https://api.ipify.org?format=text"  # можно поменять на другой сервис, если этот блочится
-
-        try:
-            logger.info("Navigating to IP check page: %s", test_url)
-            self.driver.get(test_url)
-
-            # дадим странице чуть времени
-            import time
-            time.sleep(1.0)
-
-            ip_text = self.driver.execute_script(
-                "return document.body && document.body.innerText ? document.body.innerText.trim() : '';"
-            )
-
-            if ip_text:
-                logger.info("Outbound IP via page (%s): %s", tag, ip_text)
-            else:
-                logger.warning("Could not read IP text from page (%s)", tag)
-
-        except Exception as e:
-            logger.warning("Failed to detect IP via page (%s): %s", tag, e)
-
-
     def log_current_ip(self, tag: str = ""):
         """
         Логируем внешний IP, с которого Chromium ходит в интернет (через прокси).
-        Используем execute_async_script, чтобы дождаться fetch().
-        Если не удалось — логируем текст ошибки.
+        Использует execute_async_script, чтобы дождаться fetch.
         """
         if not self.driver:
             logger.warning("log_current_ip called but driver is None")
@@ -142,31 +107,18 @@ class SeleniumManager:
                 var done = arguments[0];
                 fetch('https://api.ipify.org?format=json')
                   .then(function(r) { return r.json(); })
-                  .then(function(d) {
-                      done({ok: true, ip: d.ip});
-                  })
-                  .catch(function(e) {
-                      done({ok: false, error: String(e)});
-                  });
+                  .then(function(d) { done(d.ip); })
+                  .catch(function(e) { done(null); });
             """
-            result = self.driver.execute_async_script(script)
+            ip = self.driver.execute_async_script(script)
 
-            # result должен быть объектом {ok: bool, ip?: str, error?: str}
-            if not isinstance(result, dict):
-                logger.warning("Unexpected IP check result (%s): %r", tag, result)
-                return
-
-            if result.get("ok") and result.get("ip"):
+            if ip:
                 if tag:
-                    logger.info("Outbound IP (%s): %s", tag, result["ip"])
+                    logger.info("Outbound IP (%s): %s", tag, ip)
                 else:
-                    logger.info("Outbound IP: %s", result["ip"])
+                    logger.info("Outbound IP: %s", ip)
             else:
-                logger.warning(
-                    "Could not detect outbound IP (%s): %s",
-                    tag,
-                    result.get("error", "unknown error"),
-                )
+                logger.warning("Could not detect outbound IP (%s): got null", tag)
         except Exception as e:
             logger.warning("Failed to detect outbound IP (%s): %s", tag, e)
 
@@ -236,11 +188,6 @@ class SeleniumManager:
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
 
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-
-
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
@@ -290,10 +237,8 @@ class SeleniumManager:
 
         logger.info("Chrome driver created successfully")
 
-        # Можно оставить сразу после инициализации:
+        # Сразу проверим, какой IP видит мир с точки зрения браузера
         self.log_current_ip(tag="after driver init")
-
-        self.detect_ip_via_page(tag="after driver init")
 
         return driver
 
