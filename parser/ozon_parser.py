@@ -150,7 +150,47 @@ class OzonWorker:
         except Exception as e:
             logger.error(f"Failed to initialize worker {self.worker_id}: {e}")
             raise
-    
+
+    def handle_blocked_page(self, context: str = "unknown"):
+        """
+        Вызывается когда страница, скорее всего, заблокирована (капча / enable JS / антибот).
+        Делает скрин всей страницы и выполняет пробный JS.
+        """
+        if not self.page:
+            logger.warning(f"Worker {self.worker_id}: no page object to handle blocked page")
+            return
+
+        try:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"blocked_{context}_{timestamp}.png"
+
+            # 1. Full-page скриншот
+            self.page.screenshot(path=filename, full_page=True)
+            logger.warning(
+                f"Worker {self.worker_id}: blocked page screenshot saved to {filename} (context={context})"
+            )
+
+            # 2. Выполняем какой-нибудь JS (пока просто для отладки)
+            try:
+                info = self.page.evaluate(
+                    """() => ({
+                        url: window.location.href,
+                        ua: navigator.userAgent,
+                        title: document.title
+                    })"""
+                )
+                logger.warning(
+                    f"Worker {self.worker_id}: blocked page info: url={info['url']}, "
+                    f"title={info['title']}, ua={info['ua']}"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"Worker {self.worker_id}: failed to run debug JS on blocked page: {e}"
+                )
+
+        except Exception as e:
+            logger.error(f"Worker {self.worker_id}: failed to handle blocked page: {e}")
+
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         if not self.driver:
             raise RuntimeError(f"Worker {self.worker_id} not initialized")
@@ -189,6 +229,7 @@ class OzonWorker:
 
                 navigation_success = self.selenium_manager.navigate_to_url(product_url)
                 if not navigation_success:
+                    self.handle_blocked_page(context=f"product_{article}_attempt_{attempt + 1}")
                     if attempt == 0:
                         time.sleep(1)
                         continue
@@ -200,6 +241,7 @@ class OzonWorker:
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)
 
                 if not navigation_success:
+                    self.handle_blocked_page(context=f"api_{article}_attempt_{attempt + 1}")
                     if attempt == 0:
                         time.sleep(1)
                         continue
@@ -224,6 +266,7 @@ class OzonWorker:
                     return ArticleResult(article=article, success=False, error="JSON parsing failed")
                 
             except Exception as e:
+                self.handle_blocked_page(context=f"exception_article_{article}_attempt_{attempt + 1}")
                 if attempt == 0:
                     continue
                 return ArticleResult(article=article, success=False, error=str(e))
