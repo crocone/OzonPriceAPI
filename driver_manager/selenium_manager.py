@@ -423,27 +423,39 @@ class SeleniumManager:
             logger.error(f"Error in debug: {e}")
 
     def check_proxy_alive(self, proxy: ProxyInfo, timeout: int = 10) -> bool:
-        """
-        Простейшая проверка прокси через requests.
-        ВАЖНО: структура ProxyInfo может отличаться, адаптируй host/port под свой класс.
-        """
         import requests
 
-        # пример, если в proxy есть host/port
         proxy_url = f"http://{proxy.login}:{proxy.password}@{proxy.host}:{proxy.port}"
-
         proxies = {
             "http": proxy_url,
             "https": proxy_url,
         }
 
         try:
-            resp = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=timeout)
-            resp.raise_for_status()
-            logger.info("Proxy %s OK, response IP: %s", proxy_url, resp.text)
+            resp = requests.get(
+                "https://www.google.com/generate_204",
+                proxies=proxies,
+                timeout=timeout,
+                allow_redirects=False,
+            )
+            # Если вообще доехали и получили ответ — считаем, что прокси живой
+            logger.info(
+                "Proxy %s is reachable, status=%s, reason=%s",
+                proxy_url, resp.status_code, resp.reason
+            )
             return True
+        except requests.exceptions.ProxyError as e:
+            logger.warning("Proxy %s ProxyError (likely dead/unusable): %s", proxy_url, e)
+            return False
+        except requests.exceptions.ConnectTimeout as e:
+            logger.warning("Proxy %s connect timeout: %s", proxy_url, e)
+            return False
+        except requests.exceptions.ReadTimeout as e:
+            logger.warning("Proxy %s read timeout: %s", proxy_url, e)
+            return False
         except Exception as e:
-            logger.warning("Proxy %s seems dead or unreachable: %s", proxy_url, e)
+            logger.warning("Proxy %s unexpected error while checking: %s", proxy_url, e)
+            # тут уже по вкусу: можно вернуть False, можно True
             return False
 
     def close(self):
