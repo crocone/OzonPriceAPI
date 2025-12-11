@@ -96,7 +96,8 @@ class SeleniumManager:
     def log_current_ip(self, tag: str = ""):
         """
         Логируем внешний IP, с которого Chromium ходит в интернет (через прокси).
-        Использует execute_async_script, чтобы дождаться fetch.
+        Используем execute_async_script, чтобы дождаться fetch().
+        Если не удалось — логируем текст ошибки.
         """
         if not self.driver:
             logger.warning("log_current_ip called but driver is None")
@@ -107,18 +108,31 @@ class SeleniumManager:
                 var done = arguments[0];
                 fetch('https://api.ipify.org?format=json')
                   .then(function(r) { return r.json(); })
-                  .then(function(d) { done(d.ip); })
-                  .catch(function(e) { done(null); });
+                  .then(function(d) {
+                      done({ok: true, ip: d.ip});
+                  })
+                  .catch(function(e) {
+                      done({ok: false, error: String(e)});
+                  });
             """
-            ip = self.driver.execute_async_script(script)
+            result = self.driver.execute_async_script(script)
 
-            if ip:
+            # result должен быть объектом {ok: bool, ip?: str, error?: str}
+            if not isinstance(result, dict):
+                logger.warning("Unexpected IP check result (%s): %r", tag, result)
+                return
+
+            if result.get("ok") and result.get("ip"):
                 if tag:
-                    logger.info("Outbound IP (%s): %s", tag, ip)
+                    logger.info("Outbound IP (%s): %s", tag, result["ip"])
                 else:
-                    logger.info("Outbound IP: %s", ip)
+                    logger.info("Outbound IP: %s", result["ip"])
             else:
-                logger.warning("Could not detect outbound IP (%s): got null", tag)
+                logger.warning(
+                    "Could not detect outbound IP (%s): %s",
+                    tag,
+                    result.get("error", "unknown error"),
+                )
         except Exception as e:
             logger.warning("Failed to detect outbound IP (%s): %s", tag, e)
 
@@ -236,7 +250,7 @@ class SeleniumManager:
 
         logger.info("Chrome driver created successfully")
 
-        # Сразу проверим, какой IP видит мир с точки зрения браузера
+        # Можно оставить сразу после инициализации:
         self.log_current_ip(tag="after driver init")
 
         return driver
