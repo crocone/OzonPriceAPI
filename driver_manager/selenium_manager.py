@@ -23,67 +23,6 @@ import textwrap
 logger = logging.getLogger(__name__)
 
 
-def build_proxy_auth_extension_dir(self, username: str, password: str) -> str:
-    """
-    Создаёт unpacked Chrome-расширение (Manifest V3), которое автоматически
-    подставляет proxy-логин/пароль через onAuthRequired.
-    Возвращает путь к директории расширения.
-    """
-
-    # Манифест для MV3
-    manifest_json = textwrap.dedent(f"""
-    {{
-      "name": "Proxy Auth Helper",
-      "description": "Auto-auth for HTTP proxy",
-      "version": "1.0.0",
-      "manifest_version": 3,
-      "permissions": [
-        "proxy",
-        "storage",
-        "webRequest",
-        "webRequestAuthProvider"
-      ],
-      "host_permissions": [
-        "<all_urls>"
-      ],
-      "background": {{
-        "service_worker": "background.js"
-      }}
-    }}
-    """).strip()
-
-    # background.js: всегда отдаём одни и те же креды
-    background_js = textwrap.dedent(f"""
-    chrome.webRequest.onAuthRequired.addListener(
-      (details, callback) => {{
-        callback({{
-          authCredentials: {{
-            username: "{username}",
-            password: "{password}"
-          }}
-        }});
-      }},
-      {{ urls: ["<all_urls>"] }},
-      ["asyncBlocking"]
-    );
-    """).strip()
-
-    tmp_dir = tempfile.mkdtemp(prefix="chrome_proxy_auth_ext_")
-
-    manifest_path = os.path.join(tmp_dir, "manifest.json")
-    background_path = os.path.join(tmp_dir, "background.js")
-
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        f.write(manifest_json)
-
-    with open(background_path, "w", encoding="utf-8") as f:
-        f.write(background_js)
-
-    # запомним, чтобы потом удалить
-    self._proxy_ext_dir = tmp_dir
-    logger.info("Proxy auth extension created at %s", tmp_dir)
-
-    return tmp_dir
 
 class SeleniumManager:
     def __init__(self):
@@ -91,6 +30,69 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
         self._proxy_ext_dir: Optional[str] = None
+
+    def build_proxy_auth_extension_dir(self, username: str, password: str) -> str:
+        """
+        Создаёт unpacked Chrome-расширение (Manifest V3), которое автоматически
+        подставляет proxy-логин/пароль через onAuthRequired.
+        Возвращает путь к директории расширения.
+        """
+
+        # Манифест для MV3
+        manifest_json = textwrap.dedent(f"""
+        {{
+          "name": "Proxy Auth Helper",
+          "description": "Auto-auth for HTTP proxy",
+          "version": "1.0.0",
+          "manifest_version": 3,
+          "permissions": [
+            "proxy",
+            "storage",
+            "webRequest",
+            "webRequestAuthProvider"
+          ],
+          "host_permissions": [
+            "<all_urls>"
+          ],
+          "background": {{
+            "service_worker": "background.js"
+          }}
+        }}
+        """).strip()
+
+        # background.js: всегда отдаём одни и те же креды
+        background_js = textwrap.dedent(f"""
+        chrome.webRequest.onAuthRequired.addListener(
+          (details, callback) => {{
+            callback({{
+              authCredentials: {{
+                username: "{username}",
+                password: "{password}"
+              }}
+            }});
+          }},
+          {{ urls: ["<all_urls>"] }},
+          ["asyncBlocking"]
+        );
+        """).strip()
+
+        tmp_dir = tempfile.mkdtemp(prefix="chrome_proxy_auth_ext_")
+
+        manifest_path = os.path.join(tmp_dir, "manifest.json")
+        background_path = os.path.join(tmp_dir, "background.js")
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            f.write(manifest_json)
+
+        with open(background_path, "w", encoding="utf-8") as f:
+            f.write(background_js)
+
+        # запомним, чтобы потом удалить
+        self._proxy_ext_dir = tmp_dir
+        logger.info("Proxy auth extension created at %s", tmp_dir)
+
+        return tmp_dir
+
 
     def build_proxy_auth_extension(self) -> str:
         """
