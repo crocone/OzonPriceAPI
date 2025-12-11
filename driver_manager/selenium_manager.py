@@ -28,7 +28,7 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
 
-    def build_proxy_auth_extension(username: str, password: str) -> str:
+    def build_proxy_auth_extension(self) -> str:
         """
         Создаёт Chrome-расширение (Manifest V3), которое автоматически
         подставляет proxy-логин/пароль через onAuthRequired.
@@ -63,8 +63,8 @@ class SeleniumManager:
       (details, callback) => {{
         callback({{
           authCredentials: {{
-            username: "{username}",
-            password: "{password}"
+            username: "{self.proxy.login}",
+            password: "{self.proxy.password}"
           }}
         }});
       }},
@@ -114,10 +114,7 @@ class SeleniumManager:
             chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
 
             # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
-            proxy_ext_path = build_proxy_auth_extension(
-                username=self.proxy.login,
-                password=self.proxy.password,
-            )
+            proxy_ext_path = self.build_proxy_auth_extension()
             chrome_options.add_extension(proxy_ext_path)
 
             logger.info("Using proxy %s via %s", self.proxy.safe_label, proxy_host_port)
