@@ -76,26 +76,27 @@ class SeleniumManager:
     def setup_driver(self):
         chrome_options = uc.ChromeOptions()
 
+        # Базовые аргументы
         if settings.HEADLESS:
             chrome_options.add_argument("--headless=new")
 
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_argument("--disable-web-security")
-        chrome_options.add_argument("--allow-running-insecure-content")
-
-        # Отключить автоматизационные флаги
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        # chrome_options.add_experimental_option('useAutomationExtension', False)
 
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/143.0.0.0 Safari/537.36"
+            "Chrome/130.0.6723.59 Safari/537.36"
         )
+
+        # Отключаем логирование и автоматизацию через experimental_option
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-logging", "enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+
+        # Дополнительные опции для избежания детекции
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_argument('--disable-infobars')
 
         chrome_binary = self._find_chrome_binary()
 
@@ -108,23 +109,52 @@ class SeleniumManager:
         self.proxy = proxy_manager.get_random_proxy()
 
         if self.proxy:
-            chrome_options.add_argument(f"--proxy-server={self.proxy.browser_proxy}")
+            # Формат прокси: http://host:port
+            chrome_options.add_argument(f"--proxy-server=http://{self.proxy.host}:{self.proxy.port}")
 
-            # 2) Расширение с авторизацией (логин/пароль одинаковы для всех)
-            proxy_ext_path = self.build_proxy_auth_extension(self.proxy.login, self.proxy.password)
+            # Создаем и добавляем расширение для авторизации
+            proxy_ext_path = SeleniumManager.build_proxy_auth_extension(
+                username=self.proxy.login,
+                password=self.proxy.password,
+            )
+
+            # Добавляем расширение
             chrome_options.add_extension(proxy_ext_path)
+            self.proxy_extension_path = proxy_ext_path  # Сохраняем путь для очистки
 
-            logger.info("Using proxy %s", self.proxy.browser_proxy)
+            logger.info("Using proxy %s via %s:%s",
+                        self.proxy.safe_label, self.proxy.host, self.proxy.port)
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
-        driver = uc.Chrome(options=chrome_options, browser_executable_path=chrome_binary if chrome_binary else None)
+        try:
+            # Создаем драйвер с исправленными опциями
+            driver = uc.Chrome(
+                options=chrome_options,
+                browser_executable_path=chrome_binary if chrome_binary else None,
+                version_main=130  # Указываем версию Chrome (130 или вашу текущую)
+            )
 
-        self.driver = driver
-        self.wait = WebDriverWait(driver, 20)
+            # Применяем stealth для избежания детекции
+            stealth(driver,
+                    languages=["en-US", "en"],
+                    vendor="Google Inc.",
+                    platform="Win32",
+                    webgl_vendor="Intel Inc.",
+                    renderer="Intel Iris OpenGL Engine",
+                    fix_hairline=True,
+                    )
 
-        logger.info("Chrome driver created successfully")
-        return driver
+            self.driver = driver
+            self.wait = WebDriverWait(driver, 20)
+
+            logger.info("Chrome driver created successfully")
+            return driver
+
+        except Exception as e:
+            logger.error(f"Failed to create driver: {e}")
+            # Пробуем fallback - создаем без undetected-chromedriver
+            return self._create_fallback_driver()
 
     def _find_chrome_binary(self) -> Optional[str]:
         """Locate Chrome/Chromium executable.
