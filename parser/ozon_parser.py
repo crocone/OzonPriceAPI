@@ -2,9 +2,10 @@ import json
 import logging
 import time
 import random
+import asyncio
 import concurrent.futures
 from typing import List, Optional
-from driver_manager.selenium_manager import SeleniumManager
+from driver_manager.playwright_manager import SyncPlaywrightManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
 from utils.helpers import (
     build_ozon_api_url,
@@ -23,22 +24,20 @@ class OzonParser:
     def __init__(self):
         self.MAX_WORKERS = settings.MAX_WORKERS
         self.MIN_ARTICLES_PER_WORKER = settings.MAX_ARTICLES_PER_WORKER
-        self.TARGET_TIME_SECONDS = 90  # 1.5 минуты
-        self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
+        self.TARGET_TIME_SECONDS = 90
+        self.ESTIMATED_TIME_PER_ARTICLE = 6
 
     def initialize(self):
         logger.info("Ozon parser initialized successfully")
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         total_articles = len(articles)
-        logger.info(f"Starting to parse {total_articles} articles with target time {self.TARGET_TIME_SECONDS}s")
+        logger.info(f"Starting to parse {total_articles} articles")
 
         if total_articles <= self.MIN_ARTICLES_PER_WORKER:
-            # Мало артикулов - используем один воркер
             logger.info("Using single worker for small batch")
             return self._parse_with_single_worker(articles)
 
-        # Рассчитываем оптимальное количество воркеров
         worker_groups = self._calculate_optimal_workers(articles)
         logger.info(f"Using {len(worker_groups)} workers for {total_articles} articles")
 
@@ -46,22 +45,15 @@ class OzonParser:
 
     def _calculate_optimal_workers(self, articles: List[int]) -> List[List[int]]:
         total_articles = len(articles)
-
-        # Рассчитываем сколько воркеров нужно для укладывания в 1.5 минуты
         estimated_total_time = total_articles * self.ESTIMATED_TIME_PER_ARTICLE
         needed_workers = max(1, int(estimated_total_time / self.TARGET_TIME_SECONDS))
-
-        # Ограничиваем максимальным количеством воркеров
         optimal_workers = min(needed_workers, self.MAX_WORKERS)
 
-        # Убеждаемся что в каждом воркере минимум 3 артикула (кроме остатка)
         if total_articles / optimal_workers < self.MIN_ARTICLES_PER_WORKER:
             optimal_workers = max(1, total_articles // self.MIN_ARTICLES_PER_WORKER)
 
-        logger.info(f"Calculated optimal workers: {optimal_workers} for {total_articles} articles")
-        logger.info(f"Estimated time per worker: {estimated_total_time / optimal_workers:.1f}s")
+        logger.info(f"Calculated optimal workers: {optimal_workers}")
 
-        # Распределяем артикулы по воркерам
         articles_per_worker = total_articles // optimal_workers
         remainder = total_articles % optimal_workers
 
@@ -69,13 +61,10 @@ class OzonParser:
         start_idx = 0
 
         for i in range(optimal_workers):
-            # Добавляем по одному дополнительному артикулу первым воркерам для остатка
             current_batch_size = articles_per_worker + (1 if i < remainder else 0)
             end_idx = start_idx + current_batch_size
-
             worker_group = articles[start_idx:end_idx]
             worker_groups.append(worker_group)
-
             logger.info(f"Worker {i + 1}: {len(worker_group)} articles")
             start_idx = end_idx
 
@@ -94,13 +83,11 @@ class OzonParser:
         start_time = time.time()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(worker_groups)) as executor:
-            # Запускаем все воркеры параллельно
             futures = []
             for i, group in enumerate(worker_groups):
                 future = executor.submit(self._parse_worker_group, group, i + 1)
                 futures.append(future)
 
-            # Собираем результаты по мере готовности
             all_results = []
             completed = 0
 
@@ -109,15 +96,13 @@ class OzonParser:
                     worker_results = future.result()
                     all_results.extend(worker_results)
                     completed += 1
-
                     elapsed = time.time() - start_time
                     logger.info(f"Worker {completed}/{len(worker_groups)} completed in {elapsed:.1f}s")
-
                 except Exception as e:
                     logger.error(f"Worker failed: {e}")
 
         total_time = time.time() - start_time
-        logger.info(f"All workers completed in {total_time:.1f}s (target: {self.TARGET_TIME_SECONDS}s)")
+        logger.info(f"All workers completed in {total_time:.1f}s")
 
         return self._sort_results_by_original_order(all_results, original_articles)
 
@@ -142,14 +127,14 @@ class OzonParser:
 class OzonWorker:
     def __init__(self, worker_id: int = 1):
         self.worker_id = worker_id
-        self.selenium_manager = SeleniumManager()
-        self.driver = None
+        self.playwright_manager = SyncPlaywrightManager()
+        self.page = None
 
     def initialize(self):
         try:
-            self.driver = self.selenium_manager.setup_driver()
+            self.page = self.playwright_manager.setup_driver()
 
-            # Прогрев: заходим на главную Ozon перед началом работы
+            # Прогрев: заходим на Ozon
             self.warm_up_ozon()
 
             logger.info(f"Worker {self.worker_id} initialized successfully")
@@ -158,24 +143,19 @@ class OzonWorker:
             raise
 
     def warm_up_ozon(self):
-        """Прогрев Ozon перед парсингом"""
-        if not self.driver:
-            return
-
+        """Прогрев Ozon"""
         try:
-            # Заходим на главную Ozon для установки куков
-            success = self.selenium_manager.navigate_to_url(settings.OZON_BASE_URL)
+            success = self.playwright_manager.navigate_to_url(settings.OZON_BASE_URL)
             if success:
-                time.sleep(random.uniform(3, 6))
-                logger.info(f"Worker {self.worker_id}: Ozon warmed up successfully")
+                time.sleep(random.uniform(3, 5))
+                logger.info(f"Worker {self.worker_id}: Ozon warmed up")
             else:
                 logger.warning(f"Worker {self.worker_id}: Failed to warm up Ozon")
-
         except Exception as e:
-            logger.debug(f"Worker {self.worker_id}: Error warming up Ozon: {e}")
+            logger.debug(f"Worker {self.worker_id}: Error warming up: {e}")
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
-        if not self.driver:
+        if not self.page:
             raise RuntimeError(f"Worker {self.worker_id} not initialized")
 
         results = []
@@ -183,138 +163,84 @@ class OzonWorker:
 
         for i, article in enumerate(articles, 1):
             article_start = time.time()
-            result = self.parse_article_with_retry(article)
+            result = self.parse_article(article)
             results.append(result)
 
             article_time = time.time() - article_start
             elapsed_total = time.time() - start_time
             avg_time = elapsed_total / i
-            remaining = len(articles) - i
-            estimated_remaining = remaining * avg_time
 
             logger.info(f"Worker {self.worker_id}: {i}/{len(articles)} articles, "
-                        f"current: {article_time:.1f}s, avg: {avg_time:.1f}s, "
-                        f"ETA: {estimated_remaining:.1f}s")
+                        f"current: {article_time:.1f}s, avg: {avg_time:.1f}s")
 
-            # Пауза между артикулами (рандомизированная)
+            # Пауза между артикулами
             if i < len(articles):
-                pause_time = random.uniform(1.0, 3.0)
-                time.sleep(pause_time)
+                time.sleep(random.uniform(1.0, 2.5))
 
         total_time = time.time() - start_time
-        logger.info(f"Worker {self.worker_id} completed {len(articles)} articles in {total_time:.1f}s")
+        logger.info(f"Worker {self.worker_id} completed in {total_time:.1f}s")
 
         return results
 
-    def parse_article_with_retry(self, article: int, max_retries: int = 3) -> ArticleResult:
-        """Парсинг артикула с повторными попытками"""
-
+    def parse_article(self, article: int, max_retries: int = 2) -> ArticleResult:
+        """Парсинг одного артикула"""
         for attempt in range(max_retries):
             try:
                 api_url = build_ozon_api_url(article)
 
-                # 0) Прогрев: открываем обычную карточку товара
+                # 1. Открываем карточку товара
                 product_url = f"{settings.OZON_BASE_URL}/product/{article}/"
+                success = self.playwright_manager.navigate_to_url(product_url)
 
-                navigation_success = self.selenium_manager.navigate_to_url(product_url, max_retries=2)
-                if not navigation_success:
+                if not success:
                     if attempt < max_retries - 1:
-                        self.handle_blockage(attempt + 1)
+                        time.sleep(random.uniform(2, 4))
                         continue
-                    return ArticleResult(article=article, success=False, error="Navigation to product page failed")
+                    return ArticleResult(article=article, success=False,
+                                         error="Failed to navigate to product page")
 
-                # Рандомизированная задержка
-                time.sleep(random.uniform(2, 4))
+                time.sleep(random.uniform(2, 3))
 
-                # Имитация человеческого поведения
-                self.simulate_human_interaction()
+                # 2. Открываем API URL
+                success = self.playwright_manager.navigate_to_url(api_url)
 
-                # 1) Переход на API URL
-                navigation_success = self.selenium_manager.navigate_to_url(api_url, max_retries=2)
-
-                if not navigation_success:
+                if not success:
                     if attempt < max_retries - 1:
-                        self.handle_blockage(attempt + 1)
+                        time.sleep(random.uniform(2, 4))
                         continue
-                    return ArticleResult(article=article, success=False, error="Navigation to API failed")
+                    return ArticleResult(article=article, success=False,
+                                         error="Failed to navigate to API")
 
-                # 2) Ждём JSON ответ
-                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
+                # 3. Ждем JSON
+                json_content = self.playwright_manager.wait_for_json_response(timeout=20)
 
                 if not json_content:
                     if attempt < max_retries - 1:
-                        logger.info(f"Retry {attempt + 1} for article {article}: No JSON response")
-                        self.handle_blockage(attempt + 1)
+                        time.sleep(random.uniform(2, 4))
                         continue
-                    return ArticleResult(article=article, success=False, error="No JSON response")
+                    return ArticleResult(article=article, success=False,
+                                         error="No JSON response")
 
-                # 3) Парсинг данных
+                # 4. Извлекаем данные
                 result = self.extract_price_info(json_content, article)
 
                 if result and result.success:
                     return result
                 elif attempt < max_retries - 1:
-                    logger.info(f"Retry {attempt + 1} for article {article}: JSON parsing failed")
-                    self.handle_blockage(attempt + 1)
+                    time.sleep(random.uniform(2, 4))
                     continue
                 else:
-                    return ArticleResult(article=article, success=False, error="JSON parsing failed")
+                    return ArticleResult(article=article, success=False,
+                                         error="Failed to extract price info")
 
             except Exception as e:
                 if attempt < max_retries - 1:
-                    logger.info(f"Retry {attempt + 1} for article {article}: Exception {e}")
-                    self.handle_blockage(attempt + 1)
+                    logger.debug(f"Retry {attempt + 1} for article {article}: {e}")
+                    time.sleep(random.uniform(3, 6))
                     continue
                 return ArticleResult(article=article, success=False, error=str(e))
 
         return ArticleResult(article=article, success=False, error="Max retries exceeded")
-
-    def simulate_human_interaction(self):
-        """Имитация человеческого взаимодействия со страницей"""
-        if not self.driver:
-            return
-
-        try:
-            # Случайные действия
-            actions = [
-                lambda: self.driver.execute_script("window.scrollBy(0, %d)" % random.randint(200, 600)),
-                lambda: self.driver.execute_script("window.scrollBy(0, %d)" % random.randint(-100, -300)),
-                lambda: time.sleep(random.uniform(0.3, 1.2)),
-                lambda: self.driver.execute_script("""
-                    // Случайный клик
-                    const elements = document.querySelectorAll('button, a, div[onclick]');
-                    if (elements.length > 0) {
-                        const randomElement = elements[Math.floor(Math.random() * elements.length)];
-                        randomElement.click();
-                    }
-                """),
-            ]
-
-            # Выполняем несколько случайных действий
-            for _ in range(random.randint(2, 4)):
-                random.choice(actions)()
-                time.sleep(random.uniform(0.2, 0.6))
-
-        except Exception as e:
-            logger.debug(f"Error simulating human interaction: {e}")
-
-    def handle_blockage(self, attempt: int):
-        """Обработка блокировки"""
-        try:
-            # Увеличиваем паузу с каждой попыткой
-            pause_time = attempt * random.uniform(3, 7)
-            logger.info(f"Pausing for {pause_time:.1f}s after blockage (attempt {attempt})")
-            time.sleep(pause_time)
-
-            # Очищаем куки
-            self.driver.delete_all_cookies()
-
-            # Возвращаемся на главную
-            self.driver.get(settings.OZON_BASE_URL)
-            time.sleep(random.uniform(2, 4))
-
-        except Exception as e:
-            logger.debug(f"Error handling blockage: {e}")
 
     def extract_price_info(self, json_content: str, article: int) -> Optional[ArticleResult]:
         try:
@@ -327,7 +253,6 @@ class OzonWorker:
             if not widget_states:
                 return None
 
-            # Быстрый поиск без отладки
             web_price_value = find_web_price_property(widget_states)
             if not web_price_value:
                 return None
@@ -352,7 +277,6 @@ class OzonWorker:
                     )
                 )
 
-                # Быстрое получение дополнительных данных
                 title = find_product_title(widget_states)
                 if title:
                     result.title = title
@@ -370,6 +294,6 @@ class OzonWorker:
             return None
 
     def close(self):
-        if self.selenium_manager:
-            self.selenium_manager.close()
+        if self.playwright_manager:
+            self.playwright_manager.close()
         logger.info(f"Worker {self.worker_id} closed successfully")
