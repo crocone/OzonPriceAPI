@@ -236,7 +236,7 @@ class SeleniumManager:
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
