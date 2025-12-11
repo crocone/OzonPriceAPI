@@ -29,7 +29,11 @@ class Settings(BaseSettings):
     
     # Browser settings
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-    
+
+    # Proxy settings
+    ENABLE_PROXY: bool = True
+    PROXY_LIST_PATH: str = "config/proxies.txt"
+
     class Config:
         env_file = ".env"
 

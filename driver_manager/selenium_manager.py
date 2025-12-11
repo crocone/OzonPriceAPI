@@ -13,6 +13,7 @@ import time
 import json
 import random
 import undetected_chromedriver as uc
+from utils.proxy_manager import proxy_manager, ProxyInfo
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class SeleniumManager:
     def __init__(self):
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
+        self.proxy: Optional[ProxyInfo] = None
 
     def setup_driver(self):
         chrome_options = uc.ChromeOptions()
@@ -37,6 +39,14 @@ class SeleniumManager:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/130.0.6723.59 Safari/537.36"
         )
+
+        self.proxy = proxy_manager.get_random_proxy()
+
+        if self.proxy:
+            chrome_options.add_argument(f"--proxy-server={self.proxy.proxy_url}")
+            logger.info("Using proxy %s", self.proxy.safe_label)
+        else:
+            logger.info("Proxy is not configured or list is empty, using direct connection")
 
         driver = uc.Chrome(options=chrome_options)
 
