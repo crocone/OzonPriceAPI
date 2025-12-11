@@ -117,7 +117,7 @@ class SeleniumManager:
             proxy_ext_path = self.build_proxy_auth_extension()
             chrome_options.add_extension(proxy_ext_path)
 
-            logger.info("Using proxy %s via %s", self.proxy.browser_proxy)
+            logger.info("Using proxy %s", self.proxy.browser_proxy)
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
