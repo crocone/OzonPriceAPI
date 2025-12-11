@@ -1,10 +1,9 @@
 import logging
-import asyncio
 import random
 import tempfile
 import os
 from typing import Optional
-from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
 from config.settings import settings
 from utils.proxy_manager import proxy_manager, ProxyInfo
 import zipfile
@@ -13,7 +12,7 @@ import json
 logger = logging.getLogger(__name__)
 
 
-class PlaywrightManager:
+class SyncPlaywrightManager:
     def __init__(self):
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
@@ -21,6 +20,7 @@ class PlaywrightManager:
         self.proxy: Optional[ProxyInfo] = None
         self._proxy_auth_zip: Optional[str] = None
         self._user_data_dir: Optional[str] = None
+        self.playwright = None
 
     def get_random_user_agent(self) -> str:
         """Возвращает случайный User-Agent"""
@@ -88,9 +88,9 @@ class PlaywrightManager:
         self._proxy_auth_zip = extension_path
         return extension_path
 
-    async def setup_browser(self):
+    def setup_browser(self):
         """Настраивает и запускает браузер"""
-        playwright = await async_playwright().start()
+        self.playwright = sync_playwright().start()
 
         # Настройка параметров запуска
         launch_options = {
@@ -144,7 +144,7 @@ class PlaywrightManager:
 
         try:
             # Запускаем браузер
-            self.browser = await playwright.chromium.launch(**launch_options)
+            self.browser = self.playwright.chromium.launch(**launch_options)
 
             # Создаем контекст с дополнительными настройками
             context_options = {
@@ -162,10 +162,10 @@ class PlaywrightManager:
                 }
             }
 
-            self.context = await self.browser.new_context(**context_options)
+            self.context = self.browser.new_context(**context_options)
 
             # Добавляем дополнительные заголовки
-            await self.context.add_init_script("""
+            self.context.add_init_script("""
                 // Удаляем webdriver свойство
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
@@ -191,10 +191,10 @@ class PlaywrightManager:
             """)
 
             # Создаем страницу
-            self.page = await self.context.new_page()
+            self.page = self.context.new_page()
 
             # Устанавливаем дополнительные заголовки
-            await self.page.set_extra_http_headers({
+            self.page.set_extra_http_headers({
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -207,38 +207,38 @@ class PlaywrightManager:
             })
 
             # Включаем JavaScript
-            await self.page.route("**/*", self.block_undesired_resources)
+            self.page.route("**/*", self.block_undesired_resources)
 
             logger.info("Playwright browser setup completed successfully")
 
             # Проверяем IP
-            await self.check_ip()
+            self.check_ip()
 
             return self.page
 
         except Exception as e:
             logger.error(f"Failed to setup browser: {e}")
-            await self.close()
+            self.close()
             raise
 
-    async def block_undesired_resources(self, route):
+    def block_undesired_resources(self, route):
         """Блокирует нежелательные ресурсы для ускорения загрузки"""
         resource_type = route.request.resource_type
         if resource_type in ["image", "media", "font", "stylesheet"]:
-            await route.abort()
+            route.abort()
         else:
-            await route.continue_()
+            route.continue_()
 
-    async def check_ip(self):
+    def check_ip(self):
         """Проверяет внешний IP адрес"""
         try:
-            await self.page.goto("https://api.ipify.org?format=text", wait_until="networkidle")
-            ip = await self.page.text_content("body")
+            self.page.goto("https://api.ipify.org?format=text", wait_until="networkidle")
+            ip = self.page.text_content("body")
             logger.info(f"Current IP: {ip.strip()}")
         except Exception as e:
             logger.warning(f"Could not check IP: {e}")
 
-    async def navigate_to_url(self, url: str, max_retries: int = 3) -> bool:
+    def navigate_to_url(self, url: str, max_retries: int = 3) -> bool:
         """Переходит по URL с повторными попытками"""
         for attempt in range(max_retries):
             try:
@@ -246,25 +246,26 @@ class PlaywrightManager:
 
                 # Имитируем человеческую задержку
                 if attempt > 0:
-                    await asyncio.sleep(random.uniform(2, 5))
+                    import time
+                    time.sleep(random.uniform(2, 5))
 
                 # Переходим по URL
-                await self.page.goto(
+                self.page.goto(
                     url,
                     wait_until="networkidle",
                     timeout=30000
                 )
 
                 # Имитируем человеческое поведение
-                await self.simulate_human_behavior()
+                self.simulate_human_behavior()
 
                 # Проверяем на блокировку
-                if await self.is_blocked():
+                if self.is_blocked():
                     logger.warning(f"Page appears to be blocked (attempt {attempt + 1})")
 
                     if attempt < max_retries - 1:
                         # Меняем стратегию
-                        await self.change_strategy()
+                        self.change_strategy()
                         continue
                     return False
 
@@ -274,65 +275,66 @@ class PlaywrightManager:
             except Exception as e:
                 logger.error(f"Navigation error (attempt {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(random.uniform(3, 7))
+                    import time
+                    time.sleep(random.uniform(3, 7))
                     continue
                 return False
 
         return False
 
-    async def simulate_human_behavior(self):
+    def simulate_human_behavior(self):
         """Имитирует человеческое поведение"""
         try:
             # Случайный скроллинг
             scroll_amount = random.randint(200, 800)
-            await self.page.mouse.wheel(0, scroll_amount)
-            await asyncio.sleep(random.uniform(0.5, 1.5))
+            self.page.mouse.wheel(0, scroll_amount)
+            time.sleep(random.uniform(0.5, 1.5))
 
             # Небольшой обратный скроллинг
-            await self.page.mouse.wheel(0, -random.randint(50, 200))
-            await asyncio.sleep(random.uniform(0.3, 0.8))
+            self.page.mouse.wheel(0, -random.randint(50, 200))
+            time.sleep(random.uniform(0.3, 0.8))
 
             # Случайные движения мыши
             for _ in range(random.randint(2, 4)):
                 x = random.randint(100, 500)
                 y = random.randint(100, 400)
-                await self.page.mouse.move(x, y)
-                await asyncio.sleep(random.uniform(0.1, 0.3))
+                self.page.mouse.move(x, y)
+                time.sleep(random.uniform(0.1, 0.3))
 
             # Случайный клик
             if random.random() > 0.7:
-                await self.page.mouse.click(
+                self.page.mouse.click(
                     random.randint(100, 500),
                     random.randint(100, 400),
                     delay=random.randint(100, 300)
                 )
-                await asyncio.sleep(random.uniform(0.5, 1.0))
+                time.sleep(random.uniform(0.5, 1.0))
 
         except Exception as e:
             logger.debug(f"Error simulating human behavior: {e}")
 
-    async def change_strategy(self):
+    def change_strategy(self):
         """Изменяет стратегию при обнаружении блокировки"""
         try:
             # Очищаем куки
-            await self.context.clear_cookies()
+            self.context.clear_cookies()
 
             # Меняем User-Agent
             new_ua = self.get_random_user_agent()
-            await self.context.set_extra_http_headers({"User-Agent": new_ua})
+            self.context.set_extra_http_headers({"User-Agent": new_ua})
 
             # Перезагружаем страницу
-            await self.page.reload()
-            await asyncio.sleep(random.uniform(2, 4))
+            self.page.reload()
+            time.sleep(random.uniform(2, 4))
 
         except Exception as e:
             logger.debug(f"Error changing strategy: {e}")
 
-    async def is_blocked(self) -> bool:
+    def is_blocked(self) -> bool:
         """Проверяет, заблокирован ли доступ"""
         try:
-            content = await self.page.content()
-            title = await self.page.title()
+            content = self.page.content()
+            title = self.page.title()
 
             content_lower = content.lower()
             title_lower = title.lower()
@@ -363,13 +365,13 @@ class PlaywrightManager:
             logger.error(f"Error checking if blocked: {e}")
             return True
 
-    async def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
+    def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
         """Ждет JSON ответ"""
         try:
-            start_time = asyncio.get_event_loop().time()
+            start_time = time.time()
 
-            while asyncio.get_event_loop().time() - start_time < timeout:
-                content = await self.page.content()
+            while time.time() - start_time < timeout:
+                content = self.page.content()
 
                 # Пытаемся извлечь JSON
                 json_content = self.extract_json_from_html(content)
@@ -383,12 +385,12 @@ class PlaywrightManager:
                         pass
 
                 # Проверяем, не появился ли JSON в теле страницы
-                body_text = await self.page.text_content("body")
+                body_text = self.page.text_content("body")
                 if body_text and body_text.strip().startswith("{"):
                     logger.info("Found JSON directly in body")
                     return body_text.strip()
 
-                await asyncio.sleep(random.uniform(0.5, 1.0))
+                time.sleep(random.uniform(0.5, 1.0))
 
             logger.warning(f"Timeout waiting for JSON response after {timeout} seconds")
             return None
@@ -429,20 +431,24 @@ class PlaywrightManager:
             logger.error(f"Error extracting JSON: {e}")
             return None
 
-    async def close(self):
+    def close(self):
         """Закрывает браузер и чистит ресурсы"""
         try:
             if self.page:
-                await self.page.close()
+                self.page.close()
                 self.page = None
 
             if self.context:
-                await self.context.close()
+                self.context.close()
                 self.context = None
 
             if self.browser:
-                await self.browser.close()
+                self.browser.close()
                 self.browser = None
+
+            if self.playwright:
+                self.playwright.stop()
+                self.playwright = None
 
             # Чистим временные файлы
             if self._proxy_auth_zip and os.path.exists(self._proxy_auth_zip):
@@ -456,40 +462,3 @@ class PlaywrightManager:
 
         except Exception as e:
             logger.error(f"Error closing browser: {e}")
-
-
-# Синхронная обертка для совместимости
-class SyncPlaywrightManager:
-    def __init__(self):
-        self.manager = PlaywrightManager()
-        self.loop = None
-
-    def setup_driver(self):
-        """Синхронная версия setup_browser"""
-        if not self.loop:
-            try:
-                self.loop = asyncio.get_running_loop()
-            except RuntimeError:
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-
-        return self.loop.run_until_complete(self.manager.setup_browser())
-
-    def navigate_to_url(self, url: str, max_retries: int = 3) -> bool:
-        """Синхронная версия navigate_to_url"""
-        return self.loop.run_until_complete(
-            self.manager.navigate_to_url(url, max_retries)
-        )
-
-    def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
-        """Синхронная версия wait_for_json_response"""
-        return self.loop.run_until_complete(
-            self.manager.wait_for_json_response(timeout)
-        )
-
-    def close(self):
-        """Синхронная версия close"""
-        if self.loop:
-            self.loop.run_until_complete(self.manager.close())
-            if hasattr(self.loop, 'close') and not self.loop.is_closed():
-                self.loop.close()
