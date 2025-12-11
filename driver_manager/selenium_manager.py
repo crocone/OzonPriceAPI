@@ -122,8 +122,7 @@ class SeleniumManager:
             chrome_options.add_extension(proxy_ext_path)
             self.proxy_extension_path = proxy_ext_path  # Сохраняем путь для очистки
 
-            logger.info("Using proxy %s via %s:%s",
-                        self.proxy.safe_label, self.proxy.host, self.proxy.port)
+            logger.info("Using proxyvia %s:%s", self.proxy.host, self.proxy.port)
         else:
             logger.info("Proxy is not configured or list is empty, using direct connection")
 
