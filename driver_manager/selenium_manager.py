@@ -236,11 +236,26 @@ class SeleniumManager:
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
 
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+
         chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/130.0.6723.59 Safari/537.36"
+            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
         )
+
+        profile_path = "/tmp/chrome_profile"
+        if not os.path.exists(profile_path):
+            os.makedirs(profile_path)
+
+        chrome_options.add_argument(f"--user-data-dir={profile_path}")
+        chrome_options.add_argument("--profile-directory=Default")
+
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+        chrome_options.add_argument("--disable-site-isolation-trials")
+
 
         chrome_binary = self._find_chrome_binary()
 

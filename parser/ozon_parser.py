@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import random
 import concurrent.futures
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
@@ -194,7 +195,11 @@ class OzonWorker:
                         continue
                     return ArticleResult(article=article, success=False, error="Navigation to product page failed")
 
-                time.sleep(2)  # даём озону поставить куки/сессию
+                time.sleep(random.uniform(2, 4))
+
+                # Добавьте случайные действия
+                self.driver.execute_script("window.scrollBy(0, 300);")
+                time.sleep(random.uniform(0.5, 1.5))
 
                 # 1) Теперь идём в composer-api
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)
