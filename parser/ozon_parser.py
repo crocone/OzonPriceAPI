@@ -27,15 +27,7 @@ class OzonParser:
         self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
 
     def initialize(self):
-        try:
-            self.driver = self.selenium_manager.setup_driver()
-            logger.info(f"Worker {self.worker_id} initialized successfully")
-
-            # Лог IP именно для этого воркера
-            self.selenium_manager.log_current_ip(tag=f"worker {self.worker_id} init")
-        except Exception as e:
-            logger.error(f"Failed to initialize worker {self.worker_id}: {e}")
-            raise
+        logger.info("Ozon parser initialized successfully")
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         total_articles = len(articles)
