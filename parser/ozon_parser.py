@@ -206,7 +206,7 @@ class OzonWorker:
                     return ArticleResult(article=article, success=False, error="Navigation failed")
 
                 # 2) Ждём JSON дольше (10с часто мало на VPS)
-                json_content = self.selenium_manager.wait_for_json_response(timeout=30)
+                json_content = self.selenium_manager.wait_for_json_response(timeout=60)
                 
                 if not json_content:
                     if attempt == 0:
