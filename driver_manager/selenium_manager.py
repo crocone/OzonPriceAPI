@@ -237,9 +237,10 @@ class SeleniumManager:
         chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 "
-            "Safari/537.36"
+            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+            "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
+            "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
         )
         profile_dir = settings.CHROME_PROFILE_DIR  # например /mnt/data/chrome_profile_ozon
         os.makedirs(profile_dir, exist_ok=True)
