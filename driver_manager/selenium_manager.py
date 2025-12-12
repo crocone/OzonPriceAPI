@@ -236,15 +236,14 @@ class SeleniumManager:
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
             "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
             "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
         )
-        profile_dir = settings.CHROME_PROFILE_DIR  # например /mnt/data/chrome_profile_ozon
-        os.makedirs(profile_dir, exist_ok=True)
-        chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+
         chrome_binary = self._find_chrome_binary()
 
         if chrome_binary:
@@ -285,28 +284,13 @@ class SeleniumManager:
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
-        self.driver.get("https://www.ozon.ru/")
-        time.sleep(2)
-
-        # загрузка cookies
-        # self.load_cookies_from_file(
-        #     cookies_path="config/cookies.json",
-        #     domain="ozon.ru"
-        # )
-
-        # применяем cookies
-        self.driver.refresh()
-        time.sleep(2)
-
-        cookies_now = self.driver.get_cookies()
-        logger.info("Browser has %d cookies after load", len(cookies_now))
 
         logger.info("Chrome driver created successfully")
 
         # Можно оставить сразу после инициализации:
-        # self.log_current_ip(tag="after driver init")
-        #
-        # self.detect_ip_via_page(tag="after driver init")
+        self.log_current_ip(tag="after driver init")
+
+        self.detect_ip_via_page(tag="after driver init")
 
         return driver
 
