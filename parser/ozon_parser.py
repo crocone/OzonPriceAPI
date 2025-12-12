@@ -5,7 +5,7 @@ import concurrent.futures
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
-from utils.captcha_solver import OzonCaptchaSolverV2
+from utils.captcha_solver import OzonCaptchaSolverV3
 from utils.helpers import (
     build_ozon_api_url, 
     find_web_price_property, 
@@ -179,7 +179,8 @@ class OzonWorker:
                     logger.info(f"Worker {self.worker_id}: Attempting to solve slider captcha...")
 
                     # Пытаемся решить капчу
-                    solver = OzonCaptchaSolverV2(self.driver)
+                    solver = OzonCaptchaSolverV3(self.driver)
+                    time.sleep(2)
                     if solver.solve():
                         logger.info(f"Worker {self.worker_id}: Captcha solved successfully!")
                         return True
