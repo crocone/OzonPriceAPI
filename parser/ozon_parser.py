@@ -5,6 +5,7 @@ import concurrent.futures
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
+from utils.captcha_solver import SliderCaptchaSolver
 from utils.helpers import (
     build_ozon_api_url, 
     find_web_price_property, 
