@@ -366,7 +366,7 @@ class OzonWorker:
     def solve_captcha(self):
         """Пытается решить капчу"""
         try:
-            from utils.ozon_captcha_solver_v3 import OzonCaptchaSolverV3
+            from utils.captcha_solver import OzonCaptchaSolverV3
             solver = OzonCaptchaSolverV3(self.driver)
             return solver.solve()
         except Exception as e:

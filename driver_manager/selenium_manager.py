@@ -420,7 +420,7 @@ class SeleniumManager:
     def attempt_captcha_solution(self):
         """Пытается решить капчу Ozon с новым решателем"""
         try:
-            from utils.ozon_captcha_solver_v3 import OzonCaptchaSolverV3
+            from utils.captcha_solver import OzonCaptchaSolverV3
             solver = OzonCaptchaSolverV3(self.driver)
 
             # Даем время для полной загрузки капчи
