@@ -284,17 +284,17 @@ class SeleniumManager:
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
-        driver.get("https://www.ozon.ru/")
+        self.driver.get("https://www.ozon.ru/")
         time.sleep(2)
 
         # загрузка cookies
-        self.load_cookies_from_file(
-            cookies_path="config/cookies.json",
-            domain="ozon.ru"
-        )
+        # self.load_cookies_from_file(
+        #     cookies_path="config/cookies.json",
+        #     domain="ozon.ru"
+        # )
 
         # применяем cookies
-        driver.refresh()
+        self.driver.refresh()
         time.sleep(2)
 
         cookies_now = self.driver.get_cookies()
