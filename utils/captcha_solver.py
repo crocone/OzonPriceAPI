@@ -1,272 +1,411 @@
-# captcha_solver.py
+# utils/ozon_captcha_solver.py
 import cv2
 import numpy as np
 import io
 import time
 import random
-from selenium.webdriver.common.action_chains import ActionChains
-from PIL import Image
 import logging
+import requests
+from PIL import Image
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import base64
 
 logger = logging.getLogger(__name__)
 
 
-class SliderCaptchaSolver:
-    """Решатель слайдер-капч типа 'Slide the puzzle piece'"""
+class OzonCaptchaSolverV2:
+    """Продвинутый решатель капчи Ozon с точным вычислением смещения"""
 
     def __init__(self, driver):
         self.driver = driver
+        self.scale = 1.0
 
-    def is_slider_captcha_present(self):
-        """Проверяет, присутствует ли слайдер-капча на странице"""
+    def get_scale_factor(self):
+        """Получает масштаб из стиля капчи"""
         try:
-            captcha_indicators = [
-                "Confirm that you're not a bot",
-                "Slide the",
-                "puzzle piece",
-                "slider",
-                "Slide to fit"
-            ]
+            captcha_element = self.driver.find_element(By.ID, "captcha")
+            style = captcha_element.get_attribute("style")
 
-            page_source = self.driver.page_source
-            page_text = self.driver.find_element_by_tag_name('body').text
-
-            for indicator in captcha_indicators:
-                if indicator.lower() in page_source.lower() or indicator.lower() in page_text.lower():
-                    return True
-
-            # Проверяем наличие слайдера
-            slider_elements = self.driver.find_elements_by_xpath(
-                "//*[contains(@class, 'slider') or contains(@class, 'captcha') or contains(@class, 'puzzle')]"
-            )
-            return len(slider_elements) > 0
-
-        except Exception as e:
-            logger.debug(f"Error checking captcha: {e}")
-            return False
-
-    def find_slider_element(self):
-        """Находит элемент слайдера на странице"""
-        try:
-            # Пробуем разные селекторы
-            selectors = [
-                "div[class*='slider']",
-                "div[class*='captcha'] button",
-                "button[class*='slider']",
-                ".slider-container button",
-                "div[role='slider']",
-                "#slider",
-                ".slider"
-            ]
-
-            for selector in selectors:
-                elements = self.driver.find_elements_by_css_selector(selector)
-                if elements:
-                    return elements[0]
-
-            # Ищем по атрибутам
-            elements = self.driver.find_elements_by_xpath(
-                "//*[@draggable='true' or @aria-valuenow or contains(@style, 'cursor: grab')]"
-            )
-            if elements:
-                return elements[0]
-
-        except Exception as e:
-            logger.debug(f"Error finding slider: {e}")
-
-        return None
-
-    def get_captcha_images(self):
-        """Извлекает изображения капчи (фон и пазл)"""
-        try:
-            # Пытаемся найти элементы изображений
-            images = self.driver.find_elements_by_tag_name('img')
-            captcha_images = []
-
-            for img in images:
-                src = img.get_attribute('src') or ''
-                alt = img.get_attribute('alt') or ''
-                class_name = img.get_attribute('class') or ''
-
-                # Ищем изображения капчи
-                if any(keyword in src.lower() or keyword in alt.lower() or keyword in class_name.lower()
-                       for keyword in ['captcha', 'puzzle', 'slider', 'challenge']):
-                    captcha_images.append(img)
-
-            # Если нашли 2 изображения (фон и пазл)
-            if len(captcha_images) >= 2:
-                return captcha_images[:2]
-
-            # Ищем canvas элементы
-            canvas_elements = self.driver.find_elements_by_tag_name('canvas')
-            if canvas_elements:
-                return canvas_elements
-
-        except Exception as e:
-            logger.debug(f"Error getting captcha images: {e}")
-
-        return []
-
-    def calculate_slider_offset(self, background_img, puzzle_img):
-        """Вычисляет необходимое смещение слайдера"""
-        try:
-            # Конвертируем изображения в numpy массивы
-            if isinstance(background_img, Image.Image):
-                bg_np = np.array(background_img)
+            # Ищем --scale в стиле
+            import re
+            scale_match = re.search(r'--scale:\s*([\d.]+)', style)
+            if scale_match:
+                self.scale = float(scale_match.group(1))
+                logger.info(f"Found scale factor: {self.scale}")
             else:
-                bg_np = background_img
+                # Пытаемся вычислить по размерам изображения
+                bg_img = self.driver.find_element(By.ID, "image")
+                natural_width = bg_img.get_attribute("naturalWidth")
+                client_width = bg_img.size['width']
+                if natural_width and client_width:
+                    self.scale = float(client_width) / float(natural_width)
+                    logger.info(f"Computed scale factor: {self.scale}")
 
-            if isinstance(puzzle_img, Image.Image):
-                puzzle_np = np.array(puzzle_img)
-            else:
-                puzzle_np = puzzle_img
+        except Exception as e:
+            logger.warning(f"Could not determine scale factor: {e}")
+            self.scale = 1.28  # Значение по умолчанию для Ozon
 
+        return self.scale
+
+    def download_captcha_images(self):
+        """Скачивает изображения капчи для анализа"""
+        try:
+            # Получаем элементы изображений
+            bg_element = self.driver.find_element(By.ID, "image")
+            puzzle_element = self.driver.find_element(By.ID, "puzzle")
+
+            # Получаем URL изображений
+            bg_url = bg_element.get_attribute("src")
+            puzzle_url = puzzle_element.get_attribute("src")
+
+            logger.info(f"Background URL: {bg_url[:100]}...")
+            logger.info(f"Puzzle URL: {puzzle_url[:100]}...")
+
+            # Скачиваем изображения
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            # Скачиваем фон
+            bg_response = requests.get(bg_url, headers=headers, timeout=10)
+            bg_image = Image.open(io.BytesIO(bg_response.content))
+            bg_np = np.array(bg_image)
+
+            # Скачиваем пазл
+            puzzle_response = requests.get(puzzle_url, headers=headers, timeout=10)
+            puzzle_image = Image.open(io.BytesIO(puzzle_response.content))
+            puzzle_np = np.array(puzzle_image)
+
+            # Конвертируем в RGB если нужно
+            if len(bg_np.shape) == 2:
+                bg_np = cv2.cvtColor(bg_np, cv2.COLOR_GRAY2RGB)
+            if len(puzzle_np.shape) == 2:
+                puzzle_np = cv2.cvtColor(puzzle_np, cv2.COLOR_GRAY2RGB)
+
+            logger.info(f"Background shape: {bg_np.shape}")
+            logger.info(f"Puzzle shape: {puzzle_np.shape}")
+
+            return bg_np, puzzle_np
+
+        except Exception as e:
+            logger.error(f"Error downloading captcha images: {e}")
+
+            # Fallback: делаем скриншот и пытаемся вырезать изображения
+            try:
+                return self.extract_images_from_screenshot()
+            except Exception as e2:
+                logger.error(f"Failed to extract from screenshot: {e2}")
+                return None, None
+
+    def extract_images_from_screenshot(self):
+        """Извлекает изображения капчи из скриншота"""
+        try:
+            # Делаем скриншот всей страницы
+            screenshot = self.driver.get_screenshot_as_png()
+            img = Image.open(io.BytesIO(screenshot))
+            img_np = np.array(img)
+
+            # Находим координаты капчи на странице
+            captcha_element = self.driver.find_element(By.ID, "captcha-container")
+            location = captcha_element.location
+            size = captcha_element.size
+
+            # Вырезаем область капчи
+            x, y = int(location['x']), int(location['y'])
+            w, h = int(size['width']), int(size['height'])
+
+            captcha_area = img_np[y:y + h, x:x + w]
+
+            # Пытаемся найти изображения внутри области капчи
+            # Это сложная задача, требующая анализа DOM и CSS
+
+            logger.warning("Using screenshot extraction - less accurate")
+            return captcha_area, captcha_area  # Заглушка
+
+        except Exception as e:
+            logger.error(f"Failed to extract images: {e}")
+            return None, None
+
+    def calculate_precise_offset(self, bg_image, puzzle_image):
+        """Точно вычисляет необходимое смещение слайдера"""
+        try:
             # Конвертируем в оттенки серого
-            bg_gray = cv2.cvtColor(bg_np, cv2.COLOR_RGB2GRAY)
-            puzzle_gray = cv2.cvtColor(puzzle_np, cv2.COLOR_RGB2GRAY)
+            bg_gray = cv2.cvtColor(bg_image, cv2.COLOR_RGB2GRAY)
+            puzzle_gray = cv2.cvtColor(puzzle_image, cv2.COLOR_RGB2GRAY)
 
-            # Для слайдер-капчи обычно пазл нужно найти на фоне
-            # Используем template matching
-            result = cv2.matchTemplate(bg_gray, puzzle_gray, cv2.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            # Улучшаем контраст для лучшего распознавания
+            bg_gray = cv2.equalizeHist(bg_gray)
+            puzzle_gray = cv2.equalizeHist(puzzle_gray)
 
-            # max_loc содержит координаты наилучшего совпадения
-            # Это и есть целевая позиция пазла
-            target_x = max_loc[0]
+            # Применяем Gaussian blur для удаления шума
+            bg_gray = cv2.GaussianBlur(bg_gray, (3, 3), 0)
+            puzzle_gray = cv2.GaussianBlur(puzzle_gray, (3, 3), 0)
 
-            # Текущая позиция пазла обычно в начале (0 или смещение контейнера)
-            # Вычисляем необходимое смещение
-            offset = target_x
+            # Используем template matching с несколькими методами
+            methods = [cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR_NORMED, cv2.TM_SQDIFF_NORMED]
+            best_match = None
+            best_score = -1
 
-            # Добавляем небольшую поправку (обычно нужно сместить немного дальше)
-            offset = int(offset * 1.02)  # +2% компенсация
+            for method in methods:
+                result = cv2.matchTemplate(bg_gray, puzzle_gray, method)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-            logger.info(f"Calculated slider offset: {offset}px (target_x: {target_x})")
-            return offset
+                if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+                    score = 1 - min_val
+                    location = min_loc
+                else:
+                    score = max_val
+                    location = max_loc
 
-        except Exception as e:
-            logger.error(f"Error calculating offset: {e}")
+                if score > best_score:
+                    best_score = score
+                    best_match = location
+
+            if best_match:
+                target_x = best_match[0]
+
+                # Получаем текущее положение пазла из DOM
+                puzzle_element = self.driver.find_element(By.ID, "puzzle")
+                style = puzzle_element.get_attribute("style")
+
+                # Извлекаем left из стиля
+                import re
+                left_match = re.search(r'left:\s*(\d+)px', style)
+                current_left = int(left_match.group(1)) if left_match else 11
+
+                # Конвертируем в координаты изображения с учетом масштаба
+                current_x_image = current_left / self.scale
+
+                # Вычисляем необходимое смещение
+                offset_px = target_x - current_x_image
+
+                # Конвертируем смещение в пиксели слайдера
+                slider_container = self.driver.find_element(By.ID, "slider-container")
+                container_width = slider_container.size['width']
+
+                # Вычисляем максимальное возможное смещение пазла
+                bg_width = bg_image.shape[1]
+                puzzle_width = puzzle_image.shape[1]
+                max_puzzle_offset = bg_width - puzzle_width
+
+                # Линейное преобразование
+                slider_offset = (offset_px / max_puzzle_offset) * container_width
+
+                logger.info(f"Precise calculation: target_x={target_x}, "
+                            f"current_x={current_x_image}, offset_px={offset_px:.1f}, "
+                            f"slider_offset={slider_offset:.1f}px")
+
+                return int(slider_offset)
+
             return None
 
-    def simulate_human_drag(self, slider, offset):
-        """Имитирует человеческое перетаскивание слайдера"""
+        except Exception as e:
+            logger.error(f"Error in precise offset calculation: {e}")
+            return None
+
+    def get_puzzle_initial_position(self):
+        """Получает начальное положение пазла"""
+        try:
+            puzzle_element = self.driver.find_element(By.ID, "puzzle")
+            style = puzzle_element.get_attribute("style")
+
+            import re
+            left_match = re.search(r'left:\s*(\d+)px', style)
+            top_match = re.search(r'top:\s*(\d+)px', style)
+
+            left = int(left_match.group(1)) if left_match else 11
+            top = int(top_match.group(1)) if top_match else 83
+
+            return left, top
+
+        except Exception as e:
+            logger.error(f"Error getting puzzle position: {e}")
+            return 11, 83
+
+    def simulate_human_slide(self, slider, offset):
+        """Имитирует человеческое движение слайдера"""
         try:
             actions = ActionChains(self.driver)
 
             # Нажимаем на слайдер
-            actions.click_and_hold(slider)
-            actions.pause(random.uniform(0.1, 0.3))
+            actions.click_and_hold(slider).pause(random.uniform(0.1, 0.3))
 
-            # Разбиваем перемещение на несколько этапов с разной скоростью
-            current_x = 0
-            steps = []
+            # Разбиваем движение на части
+            total_steps = random.randint(8, 12)
+            remaining = offset
 
-            # Ускорение в начале
-            for i in range(3):
-                step = offset * 0.1
-                steps.append(step)
-                current_x += step
+            # Немного сдвигаем назад для имитации дрожи
+            actions.move_by_offset(-random.uniform(2, 5), 0)
+            actions.pause(random.uniform(0.05, 0.1))
 
-            # Равномерное движение
-            remaining = offset - current_x
-            uniform_steps = 5
-            for i in range(uniform_steps):
-                step = remaining / (uniform_steps - i) if i < uniform_steps - 1 else remaining
-                steps.append(step)
-                current_x += step
+            # Основное движение
+            for i in range(total_steps):
+                if remaining <= 0:
+                    break
 
-            # Добавляем небольшие случайные отклонения
-            steps = [s + random.uniform(-2, 2) for s in steps]
+                # Нелинейное движение
+                if i < 3:  # Начало - медленно
+                    step = remaining * 0.1 + random.uniform(-1, 1)
+                elif i > total_steps - 3:  # Конец - медленно
+                    step = remaining * 0.15 + random.uniform(-0.5, 0.5)
+                else:  # Середина - быстрее
+                    step = remaining / (total_steps - i) * random.uniform(0.8, 1.2)
 
-            # Выполняем перемещение
-            for step in steps:
-                actions.move_by_offset(step, random.uniform(-1, 1))
-                actions.pause(random.uniform(0.05, 0.15))
+                step = max(1, min(step, remaining))
 
-            # Небольшая задержка перед отпусканием
-            actions.pause(random.uniform(0.1, 0.3))
+                # Добавляем небольшое вертикальное движение
+                actions.move_by_offset(step, random.uniform(-0.3, 0.3))
+                actions.pause(random.uniform(0.02, 0.08))
+
+                remaining -= step
+
+            # Небольшое движение назад (как при отпускании)
+            actions.move_by_offset(-random.uniform(3, 8), 0)
+            actions.pause(random.uniform(0.1, 0.2))
+
+            # Отпускаем
             actions.release()
-            actions.pause(random.uniform(0.2, 0.5))
-
-            # Выполняем все действия
             actions.perform()
 
-            logger.info(f"Simulated human drag for {offset}px")
+            logger.info(f"Simulated human slide for {offset}px")
             return True
 
         except Exception as e:
-            logger.error(f"Error simulating drag: {e}")
+            logger.error(f"Error simulating slide: {e}")
             return False
 
-    def solve_slider_captcha(self):
-        """Основной метод решения слайдер-капчи"""
+    def solve_with_precision(self):
+        """Решает капчу с точным вычислением"""
         try:
-            logger.info("Attempting to solve slider captcha...")
+            logger.info("Starting precision solution for Ozon captcha")
 
-            # 1. Проверяем наличие капчи
-            if not self.is_slider_captcha_present():
-                logger.info("No slider captcha detected")
+            # 1. Получаем масштаб
+            self.get_scale_factor()
+
+            # 2. Скачиваем изображения
+            bg_image, puzzle_image = self.download_captcha_images()
+            if bg_image is None or puzzle_image is None:
+                logger.error("Failed to get captcha images")
                 return False
 
-            # 2. Делаем скриншот всей страницы
-            screenshot = self.driver.get_screenshot_as_png()
-            img = Image.open(io.BytesIO(screenshot))
+            # 3. Вычисляем точное смещение
+            slider_offset = self.calculate_precise_offset(bg_image, puzzle_image)
+            if slider_offset is None:
+                logger.error("Failed to calculate offset")
+                return False
 
-            # 3. Находим слайдер
-            slider = self.find_slider_element()
+            # 4. Находим слайдер
+            slider = self.driver.find_element(By.ID, "slider")
             if not slider:
-                logger.warning("Slider element not found")
+                logger.error("Slider not found")
                 return False
 
-            # 4. Пытаемся получить изображения капчи
-            captcha_elements = self.get_captcha_images()
+            # 5. Добавляем небольшую поправку (обычно нужно немного не довезти)
+            adjustment = random.uniform(-5, 5)
+            final_offset = max(10, slider_offset + adjustment)
 
-            if len(captcha_elements) >= 2:
-                # Скачиваем оба изображения
-                bg_src = captcha_elements[0].get_attribute('src')
-                puzzle_src = captcha_elements[1].get_attribute('src')
+            logger.info(f"Final slider offset: {final_offset:.1f}px")
 
-                # Здесь можно добавить загрузку изображений по URL
-                # Но для простоты будем использовать скриншот
-                pass
+            # 6. Перемещаем слайдер
+            self.simulate_human_slide(slider, final_offset)
 
-            # 5. Для простоты используем фиксированное смещение
-            # В реальном приложении нужно вычислить точное смещение
-            # Но так как у нас нет реальных изображений, используем эвристику
+            # 7. Ждем результата
+            time.sleep(random.uniform(1.5, 2.5))
 
-            # Получаем размер слайдера
-            slider_size = slider.size
-            container_width = 300  # Примерная ширина контейнера капчи
+            # 8. Проверяем успешность
+            return self.check_success()
 
-            # Пробуем разные смещения
-            for offset in [container_width * 0.7, container_width * 0.8, container_width * 0.9, container_width]:
-                logger.info(f"Trying offset: {offset}px")
+        except Exception as e:
+            logger.error(f"Error in precision solution: {e}")
+            return False
 
-                if self.simulate_human_drag(slider, offset):
-                    # Ждем реакции страницы
-                    time.sleep(2)
+    def solve_with_heuristic(self):
+        """Эвристическое решение (fallback)"""
+        try:
+            logger.info("Using heuristic method")
 
-                    # Проверяем, исчезла ли капча
-                    if not self.is_slider_captcha_present():
-                        logger.info("Captcha solved successfully!")
-                        return True
+            # Находим слайдер
+            slider = self.driver.find_element(By.ID, "slider")
+            if not slider:
+                return False
 
-            logger.warning("Failed to solve captcha with any offset")
+            # Получаем размеры контейнера слайдера
+            container = self.driver.find_element(By.ID, "slider-container")
+            container_width = container.size['width']
+
+            # Ozon обычно требует ~80-90% от ширины контейнера
+            test_offsets = [
+                int(container_width * 0.75),
+                int(container_width * 0.80),
+                int(container_width * 0.85),
+                int(container_width * 0.88),
+                int(container_width * 0.90),
+                int(container_width * 0.92)
+            ]
+
+            for offset in test_offsets:
+                logger.info(f"Trying heuristic offset: {offset}px")
+
+                self.simulate_human_slide(slider, offset)
+                time.sleep(2)
+
+                if self.check_success():
+                    logger.info(f"Success with heuristic offset {offset}px")
+                    return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error in heuristic method: {e}")
+            return False
+
+    def check_success(self):
+        """Проверяет, успешно ли решена капча"""
+        try:
+            # Проверяем, исчезли ли элементы капчи
+            captcha_elements = self.driver.find_elements(By.ID, "captcha-container")
+            if not captcha_elements:
+                return True
+
+            # Проверяем, изменился ли текст
+            hint_element = self.driver.find_element(By.ID, "hint")
+            hint_text = hint_element.text.lower() if hint_element else ""
+
+            if "доступ" in hint_text or "доступно" in hint_text:
+                return True
+
+            # Проверяем URL
+            current_url = self.driver.current_url
+            if "antibot" not in current_url and "__rr" not in current_url:
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.debug(f"Error checking success: {e}")
+            return False
+
+    def solve(self):
+        """Основной метод решения"""
+        try:
+            # Сначала пробуем точный метод
+            if self.solve_with_precision():
+                logger.info("Captcha solved with precision method")
+                return True
+
+            logger.warning("Precision method failed, trying heuristic")
+
+            # Если не получилось, пробуем эвристический
+            if self.solve_with_heuristic():
+                logger.info("Captcha solved with heuristic method")
+                return True
+
+            logger.error("All methods failed")
             return False
 
         except Exception as e:
             logger.error(f"Error solving captcha: {e}")
             return False
-
-    def solve_with_retry(self, max_retries=3):
-        """Пытается решить капчу несколько раз"""
-        for attempt in range(max_retries):
-            logger.info(f"Captcha solving attempt {attempt + 1}/{max_retries}")
-
-            if self.solve_slider_captcha():
-                return True
-
-            # Ждем перед следующей попыткой
-            time.sleep(random.uniform(2, 4))
-
-        return False

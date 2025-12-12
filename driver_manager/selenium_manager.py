@@ -18,7 +18,7 @@ import tempfile
 import shutil
 import undetected_chromedriver as uc
 
-from utils.captcha_solver import SliderCaptchaSolver
+from utils.captcha_solver import OzonCaptchaSolverV2
 from utils.proxy_manager import proxy_manager, ProxyInfo
 import textwrap
 
@@ -414,15 +414,18 @@ class SeleniumManager:
         except Exception:
             return True
 
+    # Обновите selenium_manager.py
     def attempt_captcha_solution(self):
-        """Пытается решить капчу если она обнаружена"""
+        """Пытается решить капчу Ozon"""
         try:
-            solver = SliderCaptchaSolver(self.driver)
-            return solver.solve_with_retry()
+            from utils.ozon_captcha_solver import OzonCaptchaSolverV2
+            solver = OzonCaptchaSolverV2(self.driver)
+            return solver.solve()
         except Exception as e:
             logger.error(f"Failed to solve captcha: {e}")
             return False
 
+    # В методе navigate_to_url добавьте:
     def navigate_to_url(self, url: str) -> bool:
         if not self.driver:
             logger.error("Driver not initialized")
@@ -432,50 +435,45 @@ class SeleniumManager:
             logger.info("Navigating to: %s", url)
             self.driver.get(url)
 
-            # Минимальная задержка для API
-            time.sleep(random.uniform(3, 7))
+            # Даем время для загрузки
+            time.sleep(random.uniform(4, 6))
 
-            try:
-                title = self.driver.title
-            except Exception:
-                title = "<no title>"
+            # Прокручиваем немного
+            self.driver.execute_script("window.scrollBy(0, 400);")
+            time.sleep(random.uniform(1, 2))
 
-            # Прокрутка для имитации пользователя
-            self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
-            time.sleep(random.uniform(2, 4))
-
-            current_url = None
-            body_snippet = None
-
-            try:
-                current_url = self.driver.current_url
-                body_snippet = self.driver.execute_script(
-                    "return document.body.innerText.slice(0, 300);"
-                )
-            except Exception as e:
-                logger.debug("Error getting page debug info after navigation: %s", e)
-
-            logger.debug(
-                "After navigation: current_url=%s, title=%r, body_snippet_start=%r",
-                current_url, title, body_snippet
-            )
-
-            # Проверка блокировки (теперь с авто-решением капчи)
+            # Проверяем блокировку
             if self.is_blocked():
-                # Если is_blocked вернуло True, значит даже после попытки решения капчи страница все еще заблокирована
-                logger.warning(
-                    "Detected anti-bot/blocked page. url=%s, title=%r, snippet=%r",
-                    current_url, title, body_snippet
-                )
-                return False
+                logger.warning("Page blocked, attempting captcha solution...")
+
+                # Даем время для полной загрузки капчи
+                time.sleep(3)
+
+                # Пытаемся решить капчу
+                if self.attempt_captcha_solution():
+                    logger.info("Captcha solved successfully")
+
+                    # Ждем обновления страницы
+                    time.sleep(2)
+
+                    # Проверяем снова
+                    if not self.is_blocked():
+                        logger.info("Navigation successful after captcha")
+                        return True
+                    else:
+                        logger.warning("Still blocked after captcha solution")
+                        return False
+                else:
+                    logger.error("Failed to solve captcha")
+                    return False
 
             return True
 
         except TimeoutException:
             logger.error(f"Timeout while loading: {url}")
             return False
-        except WebDriverException as e:
-            logger.error(f"WebDriver error: {e}")
+        except Exception as e:
+            logger.error(f"Error navigating: {e}")
             return False
 
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
