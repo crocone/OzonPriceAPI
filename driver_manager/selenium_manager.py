@@ -418,7 +418,6 @@ class SeleniumManager:
     def attempt_captcha_solution(self):
         """Пытается решить капчу Ozon"""
         try:
-            from utils.ozon_captcha_solver import OzonCaptchaSolverV2
             solver = OzonCaptchaSolverV2(self.driver)
             return solver.solve()
         except Exception as e:
