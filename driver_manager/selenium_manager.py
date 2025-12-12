@@ -17,6 +17,8 @@ import zipfile
 import tempfile
 import shutil
 import undetected_chromedriver as uc
+
+from utils.captcha_solver import SliderCaptchaSolver
 from utils.proxy_manager import proxy_manager, ProxyInfo
 import textwrap
 
