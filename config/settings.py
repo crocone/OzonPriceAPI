@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     PAGE_LOAD_TIMEOUT: int = 60
     
     # Ozon settings
-    OZON_BASE_URL: str = "https://www.ozon.ru"
+    OZON_BASE_URL: str = "https://www.ozon.ru/cart"
     OZON_API_URL: str = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
     MAX_ARTICLES_PER_REQUEST: int = 150
     

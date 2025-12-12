@@ -251,7 +251,7 @@ class OzonWorker:
                 api_url = build_ozon_api_url(article)
 
                 # 0) Прогрев куков: сначала открываем обычную карточку товара
-                product_url = f"{settings.OZON_BASE_URL}/product/{article}/"
+                product_url = f"{settings.OZON_BASE_URL}"
 
                 navigation_success = self.selenium_manager.navigate_to_url(product_url)
 
