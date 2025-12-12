@@ -241,7 +241,9 @@ class SeleniumManager:
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 "
             "Safari/537.36"
         )
-
+        profile_dir = settings.CHROME_PROFILE_DIR  # например /mnt/data/chrome_profile_ozon
+        os.makedirs(profile_dir, exist_ok=True)
+        chrome_options.add_argument(f"--user-data-dir={profile_dir}")
         chrome_binary = self._find_chrome_binary()
 
         if chrome_binary:
@@ -301,9 +303,9 @@ class SeleniumManager:
         logger.info("Chrome driver created successfully")
 
         # Можно оставить сразу после инициализации:
-        self.log_current_ip(tag="after driver init")
-
-        self.detect_ip_via_page(tag="after driver init")
+        # self.log_current_ip(tag="after driver init")
+        #
+        # self.detect_ip_via_page(tag="after driver init")
 
         return driver
 

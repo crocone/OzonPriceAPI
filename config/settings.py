@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     API_DEBUG: bool = True
     
     # Selenium settings
-    HEADLESS: bool = True
+    HEADLESS: bool = False
     IMPLICIT_WAIT: int = 20
     PAGE_LOAD_TIMEOUT: int = 60
     
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     OZON_BASE_URL: str = "https://www.ozon.ru/cart"
     OZON_API_URL: str = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
     MAX_ARTICLES_PER_REQUEST: int = 150
-    
+    CHROME_PROFILE_DIR: str = "/mnt/data/chrome_profile_ozon"
     # Parser settings - оптимизировано для скорости
     MAX_RETRIES: int = 2  # Уменьшено для скорости
     RETRY_DELAY: int = 1  # Уменьшено для скорости
