@@ -15,6 +15,7 @@ from utils.helpers import (
     is_valid_json_response
 )
 from config.settings import settings
+from selenium.webdriver.common.by import By
 
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ class OzonWorker:
 
             # 2. Проверяем и пытаемся решить капчу
             try:
-                page_text = self.driver.find_element_by_tag_name('body').text.lower()
+                page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
 
                 if any(keyword in page_text for keyword in ['slide the', 'confirm that you', 'puzzle piece']):
                     logger.info(f"Worker {self.worker_id}: Attempting to solve slider captcha...")

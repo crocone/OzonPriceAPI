@@ -330,7 +330,11 @@ class SeleniumManager:
             except Exception:
                 title = "<no title>"
 
-            driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
+            try:
+                self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
+            except Exception as e:
+                logger.debug("Scroll JS failed: %s", e)
+
             time.sleep(random.uniform(2, 4))
 
             current_url = None
