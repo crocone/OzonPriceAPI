@@ -236,12 +236,10 @@ class SeleniumManager:
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
-            "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
-            "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 "
+            "Safari/537.36"
         )
 
         chrome_binary = self._find_chrome_binary()
@@ -283,6 +281,22 @@ class SeleniumManager:
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
+
+        driver.get("https://www.ozon.ru/")
+        time.sleep(2)
+
+        # загрузка cookies
+        self.load_cookies_from_file(
+            cookies_path="config/cookies.json",
+            domain="ozon.ru"
+        )
+
+        # применяем cookies
+        driver.refresh()
+        time.sleep(2)
+
+        cookies_now = self.driver.get_cookies()
+        logger.info("Browser has %d cookies after load", len(cookies_now))
 
         logger.info("Chrome driver created successfully")
 
@@ -415,6 +429,40 @@ class SeleniumManager:
 
         except Exception:
             return True
+
+    def load_cookies_from_file(self, cookies_path: str, domain: str):
+        if not self.driver:
+            raise RuntimeError("Driver not initialized")
+
+        if not os.path.exists(cookies_path):
+            raise FileNotFoundError(cookies_path)
+
+        logger.info("Loading cookies from %s", cookies_path)
+
+        with open(cookies_path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+
+        added = 0
+        for cookie in cookies:
+            # Selenium не принимает expirationDate
+            if "expirationDate" in cookie:
+                cookie["expiry"] = int(cookie.pop("expirationDate"))
+
+            # иногда SameSite ломает add_cookie
+            cookie.pop("sameSite", None)
+
+            # домен должен совпадать
+            if domain not in cookie.get("domain", ""):
+                continue
+
+            try:
+                self.driver.add_cookie(cookie)
+                added += 1
+            except Exception as e:
+                logger.debug("Failed to add cookie %s: %s", cookie.get("name"), e)
+
+        logger.info("Loaded %d cookies for domain %s", added, domain)
+
 
     # Обновите selenium_manager.py
     def attempt_captcha_solution(self):
