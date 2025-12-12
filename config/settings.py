@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     PAGE_LOAD_TIMEOUT: int = 60
     
     # Ozon settings
-    OZON_BASE_URL: str = "https://www.ozon.ru/cart"
+    OZON_BASE_URL: str = "https://www.ozon.ru"
     OZON_API_URL: str = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
     MAX_ARTICLES_PER_REQUEST: int = 150
-    CHROME_PROFILE_DIR: str = "/mnt/data/chrome_profile_ozon"
+    CHROME_PROFILE_DIR: str = "/mnt/data/chrome_profile_ozon_2"
     # Parser settings - оптимизировано для скорости
     MAX_RETRIES: int = 2  # Уменьшено для скорости
     RETRY_DELAY: int = 1  # Уменьшено для скорости
