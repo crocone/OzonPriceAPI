@@ -17,8 +17,6 @@ import zipfile
 import tempfile
 import shutil
 import undetected_chromedriver as uc
-
-from utils.captcha_solver import OzonCaptchaSolverV2
 from utils.proxy_manager import proxy_manager, ProxyInfo
 import textwrap
 
@@ -416,64 +414,58 @@ class SeleniumManager:
 
     # Обновите selenium_manager.py
     def attempt_captcha_solution(self):
-        """Пытается решить капчу Ozon"""
+        """Пытается решить капчу Ozon с новым решателем"""
         try:
-            solver = OzonCaptchaSolverV2(self.driver)
+            from utils.ozon_captcha_solver_v3 import OzonCaptchaSolverV3
+            solver = OzonCaptchaSolverV3(self.driver)
+
+            # Даем время для полной загрузки капчи
+            time.sleep(2)
+
             return solver.solve()
         except Exception as e:
             logger.error(f"Failed to solve captcha: {e}")
             return False
 
-    # В методе navigate_to_url добавьте:
-    def navigate_to_url(self, url: str) -> bool:
+    # Обновите метод is_blocked для более точного определения
+    def is_blocked(self) -> bool:
+        """Check if we're blocked by anti-bot protection"""
         if not self.driver:
-            logger.error("Driver not initialized")
-            return False
-
-        try:
-            logger.info("Navigating to: %s", url)
-            self.driver.get(url)
-
-            # Даем время для загрузки
-            time.sleep(random.uniform(4, 6))
-
-            # Прокручиваем немного
-            self.driver.execute_script("window.scrollBy(0, 400);")
-            time.sleep(random.uniform(1, 2))
-
-            # Проверяем блокировку
-            if self.is_blocked():
-                logger.warning("Page blocked, attempting captcha solution...")
-
-                # Даем время для полной загрузки капчи
-                time.sleep(3)
-
-                # Пытаемся решить капчу
-                if self.attempt_captcha_solution():
-                    logger.info("Captcha solved successfully")
-
-                    # Ждем обновления страницы
-                    time.sleep(2)
-
-                    # Проверяем снова
-                    if not self.is_blocked():
-                        logger.info("Navigation successful after captcha")
-                        return True
-                    else:
-                        logger.warning("Still blocked after captcha solution")
-                        return False
-                else:
-                    logger.error("Failed to solve captcha")
-                    return False
-
             return True
 
-        except TimeoutException:
-            logger.error(f"Timeout while loading: {url}")
+        try:
+            # Получаем текущий URL и заголовок
+            current_url = self.driver.current_url.lower()
+            title = self.driver.title.lower()
+
+            # Быстрая проверка по URL и заголовку
+            if any(keyword in current_url for keyword in ['antibot', '__rr']) or \
+                    'captcha' in title:
+                logger.warning(f"Blocked by captcha: URL={current_url}, title={title}")
+                return True
+
+            # Проверка по тексту на странице
+            page_text = self.driver.page_source.lower()
+            blocked_indicators = [
+                "confirm that you're not a bot",
+                "slide the slider",
+                "puzzle piece",
+                "antibot captcha",
+                "enable javascript",
+                "checking your browser",
+                "доступ ограничен"
+            ]
+
+            for indicator in blocked_indicators:
+                if indicator in page_text:
+                    logger.warning(f"Blocked indicator found: {indicator}")
+                    return True
+
             return False
+
         except Exception as e:
-            logger.error(f"Error navigating: {e}")
-            return False
+            logger.error(f"Error checking if blocked: {e}")
+            return True
 
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
         if not self.driver:

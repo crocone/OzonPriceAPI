@@ -241,10 +241,10 @@ class OzonWorker:
         logger.info(f"Worker {self.worker_id} completed {len(articles)} articles in {total_time:.1f}s")
         
         return results
-    
+
     def parse_article_fast(self, article: int) -> ArticleResult:
-        """Быстрый парсинг без задержек"""
-        for attempt in range(2):  # Максимум 2 попытки для скорости
+        """Быстрый парсинг с улучшенной обработкой капчи"""
+        for attempt in range(3):  # Увеличиваем до 3 попыток
             try:
                 api_url = build_ozon_api_url(article)
 
@@ -252,12 +252,41 @@ class OzonWorker:
                 product_url = f"{settings.OZON_BASE_URL}/product/{article}/"
 
                 navigation_success = self.selenium_manager.navigate_to_url(product_url)
+
                 if not navigation_success:
-                    self.handle_blocked_page(context=f"product_{article}_attempt_{attempt + 1}")
-                    if attempt == 0:
-                        time.sleep(1)
-                        continue
-                    return ArticleResult(article=article, success=False, error="Navigation to product page failed")
+                    # Проверяем, точно ли это капча
+                    time.sleep(2)  # Даем время для загрузки
+
+                    if self.is_captcha_present():
+                        logger.info(f"Captcha detected, attempting to solve...")
+                        if self.solve_captcha():
+                            logger.info("Captcha solved successfully")
+                            # После решения капчи продолжаем
+                            time.sleep(2)
+                            # Пробуем перейти снова
+                            navigation_success = self.selenium_manager.navigate_to_url(product_url)
+                            if not navigation_success:
+                                if attempt < 2:
+                                    continue
+                                return ArticleResult(article=article, success=False,
+                                                     error="Navigation failed after captcha")
+                        else:
+                            logger.warning("Failed to solve captcha")
+                            if attempt < 2:
+                                # Пробуем обновить страницу и повторить
+                                self.driver.refresh()
+                                time.sleep(3)
+                                continue
+                            return ArticleResult(article=article, success=False,
+                                                 error="Captcha solving failed")
+                    else:
+                        # Не капча, а другая ошибка
+                        self.handle_blocked_page(context=f"product_{article}_attempt_{attempt + 1}")
+                        if attempt < 2:
+                            time.sleep(1)
+                            continue
+                        return ArticleResult(article=article, success=False,
+                                             error="Navigation to product page failed")
 
                 time.sleep(2)  # даём озону поставить куки/сессию
 
@@ -265,37 +294,82 @@ class OzonWorker:
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)
 
                 if not navigation_success:
-                    self.handle_blocked_page(context=f"api_{article}_attempt_{attempt + 1}")
-                    if attempt == 0:
-                        time.sleep(1)
-                        continue
-                    return ArticleResult(article=article, success=False, error="Navigation failed")
+                    # Аналогичная обработка для API страницы
+                    time.sleep(2)
 
-                # 2) Ждём JSON дольше (10с часто мало на VPS)
+                    if self.is_captcha_present():
+                        logger.info(f"Captcha detected on API page, attempting to solve...")
+                        if self.solve_captcha():
+                            logger.info("Captcha solved on API page")
+                            time.sleep(2)
+                            navigation_success = self.selenium_manager.navigate_to_url(api_url)
+                            if not navigation_success:
+                                if attempt < 2:
+                                    continue
+                                return ArticleResult(article=article, success=False,
+                                                     error="Navigation to API failed after captcha")
+                        else:
+                            logger.warning("Failed to solve captcha on API page")
+                            if attempt < 2:
+                                self.driver.refresh()
+                                time.sleep(3)
+                                continue
+                    else:
+                        self.handle_blocked_page(context=f"api_{article}_attempt_{attempt + 1}")
+                        if attempt < 2:
+                            continue
+
+                # 2) Ждем JSON
                 json_content = self.selenium_manager.wait_for_json_response(timeout=30)
-                
+
                 if not json_content:
-                    if attempt == 0:
+                    if attempt < 2:
                         continue
                     return ArticleResult(article=article, success=False, error="No JSON response")
-                
+
                 # Парсинг данных
                 result = self.extract_price_info(json_content, article)
-                
+
                 if result and result.success:
                     return result
-                elif attempt == 0:
+                elif attempt < 2:
                     continue
                 else:
                     return ArticleResult(article=article, success=False, error="JSON parsing failed")
-                
+
             except Exception as e:
                 self.handle_blocked_page(context=f"exception_article_{article}_attempt_{attempt + 1}")
-                if attempt == 0:
+                logger.error(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    time.sleep(1)
                     continue
-                return ArticleResult(article=article, success=False, error=str(e))
-        
+
         return ArticleResult(article=article, success=False, error="Max retries exceeded")
+
+    def is_captcha_present(self):
+        """Проверяет наличие капчи на странице"""
+        try:
+            page_text = self.driver.page_source.lower()
+            captcha_indicators = [
+                "confirm that you're not a bot",
+                "slide the slider",
+                "puzzle piece",
+                "antibot captcha"
+            ]
+
+            return any(indicator in page_text for indicator in captcha_indicators)
+        except:
+            return False
+
+    def solve_captcha(self):
+        """Пытается решить капчу"""
+        try:
+            from utils.ozon_captcha_solver_v3 import OzonCaptchaSolverV3
+            solver = OzonCaptchaSolverV3(self.driver)
+            return solver.solve()
+        except Exception as e:
+            logger.error(f"Error solving captcha: {e}")
+            return False
     
     def extract_price_info(self, json_content: str, article: int) -> Optional[ArticleResult]:
         try:
