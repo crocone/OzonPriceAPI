@@ -387,7 +387,9 @@ class SeleniumManager:
                 "access denied",
                 "blocked",
                 "доступ ограничен",
-                "инцидент:"
+                "инцидент:",
+                "confirm that you're not a bot",  # Добавили для капчи
+                "slide the"  # Добавили для слайдер-капчи
             ]
 
             page_source = self.driver.page_source.lower()
@@ -395,12 +397,84 @@ class SeleniumManager:
             for indicator in blocked_indicators:
                 if indicator in page_source:
                     logger.warning("Anti-bot indicator detected: %r", indicator)
+
+                    # Если это капча, пытаемся решить
+                    if "slide the" in page_source or "confirm that you're not a bot" in page_source:
+                        logger.info("Attempting to solve captcha automatically...")
+                        if self.attempt_captcha_solution():
+                            logger.info("Captcha solved, continuing...")
+                            return False  # Не заблокирован, капча решена
+
                     return True
 
             return False
 
         except Exception:
             return True
+
+    def attempt_captcha_solution(self):
+        """Пытается решить капчу если она обнаружена"""
+        try:
+            solver = SliderCaptchaSolver(self.driver)
+            return solver.solve_with_retry()
+        except Exception as e:
+            logger.error(f"Failed to solve captcha: {e}")
+            return False
+
+    def navigate_to_url(self, url: str) -> bool:
+        if not self.driver:
+            logger.error("Driver not initialized")
+            return False
+
+        try:
+            logger.info("Navigating to: %s", url)
+            self.driver.get(url)
+
+            # Минимальная задержка для API
+            time.sleep(random.uniform(3, 7))
+
+            try:
+                title = self.driver.title
+            except Exception:
+                title = "<no title>"
+
+            # Прокрутка для имитации пользователя
+            self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
+            time.sleep(random.uniform(2, 4))
+
+            current_url = None
+            body_snippet = None
+
+            try:
+                current_url = self.driver.current_url
+                body_snippet = self.driver.execute_script(
+                    "return document.body.innerText.slice(0, 300);"
+                )
+            except Exception as e:
+                logger.debug("Error getting page debug info after navigation: %s", e)
+
+            logger.debug(
+                "After navigation: current_url=%s, title=%r, body_snippet_start=%r",
+                current_url, title, body_snippet
+            )
+
+            # Проверка блокировки (теперь с авто-решением капчи)
+            if self.is_blocked():
+                # Если is_blocked вернуло True, значит даже после попытки решения капчи страница все еще заблокирована
+                logger.warning(
+                    "Detected anti-bot/blocked page. url=%s, title=%r, snippet=%r",
+                    current_url, title, body_snippet
+                )
+                return False
+
+            return True
+
+        except TimeoutException:
+            logger.error(f"Timeout while loading: {url}")
+            return False
+        except WebDriverException as e:
+            logger.error(f"WebDriver error: {e}")
+            return False
 
     def wait_for_json_response(self, timeout: int = 30) -> Optional[str]:
         if not self.driver:

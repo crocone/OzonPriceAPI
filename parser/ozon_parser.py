@@ -151,27 +151,44 @@ class OzonWorker:
             logger.error(f"Failed to initialize worker {self.worker_id}: {e}")
             raise
 
+    # В ozon_parser.py в методе handle_blocked_page:
     def handle_blocked_page(self, context: str = "unknown"):
         """
         Вызывается когда страница, скорее всего, заблокирована (капча / enable JS / антибот).
-        Делает скрин всей страницы и выполняет пробный JS.
         """
         if not self.driver:
             logger.warning(f"Worker {self.worker_id}: no driver to handle blocked page")
-            return
+            return False  # Возвращаем статус
 
         try:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"blocked_{context}_{timestamp}.png"
 
-            # 1. Скриншот (видимая область)
-            # Для Selenium
+            # 1. Скриншот
             self.driver.save_screenshot(filename)
             logger.warning(
                 f"Worker {self.worker_id}: blocked page screenshot saved to {filename} (context={context})"
             )
 
-            # 2. Выполняем JS — возвращаем полезную инфу о странице
+            # 2. Проверяем и пытаемся решить капчу
+            try:
+                page_text = self.driver.find_element_by_tag_name('body').text.lower()
+
+                if any(keyword in page_text for keyword in ['slide the', 'confirm that you', 'puzzle piece']):
+                    logger.info(f"Worker {self.worker_id}: Attempting to solve slider captcha...")
+
+                    # Пытаемся решить капчу
+                    solver = SliderCaptchaSolver(self.driver)
+                    if solver.solve_with_retry():
+                        logger.info(f"Worker {self.worker_id}: Captcha solved successfully!")
+                        return True  # Капча решена
+                    else:
+                        logger.warning(f"Worker {self.worker_id}: Failed to solve captcha")
+
+            except Exception as e:
+                logger.debug(f"Worker {self.worker_id}: Error in captcha check: {e}")
+
+            # 3. Выполняем JS — возвращаем полезную инфу о странице
             try:
                 info = self.driver.execute_script(
                     """
@@ -191,8 +208,11 @@ class OzonWorker:
                     f"Worker {self.worker_id}: failed to run debug JS on blocked page: {e}"
                 )
 
+            return False  # Не удалось решить капчу
+
         except Exception as e:
             logger.error(f"Worker {self.worker_id}: failed to handle blocked page: {e}")
+            return False
 
     def parse_articles(self, articles: List[int]) -> List[ArticleResult]:
         if not self.driver:
