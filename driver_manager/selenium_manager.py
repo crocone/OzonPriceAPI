@@ -31,6 +31,40 @@ class SeleniumManager:
         self.proxy: Optional[ProxyInfo] = None
         self._proxy_ext_dir: Optional[str] = None
 
+    def _get_random_desktop_user_agent(self) -> str:
+        """Выбираем реалистичный desktop UA без mobile-несоответствий."""
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        ]
+        return random.choice(user_agents)
+
+    def _apply_stealth_fixes(self, driver: webdriver.Chrome):
+        """Применяет набор антидетект-настроек на уровне selenium-stealth + CDP."""
+        stealth(
+            driver,
+            languages=["ru-RU", "ru", "en-US", "en"],
+            vendor="Google Inc.",
+            platform="Win32",
+            webgl_vendor="Intel Inc.",
+            renderer="Intel Iris OpenGL Engine",
+            fix_hairline=True,
+        )
+
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": """
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru', 'en-US', 'en'] });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                    window.chrome = window.chrome || { runtime: {} };
+                """
+            }
+        )
+
     def build_proxy_auth_extension_dir(self, username: str, password: str) -> str:
         """
         Создаёт unpacked Chrome-расширение (Manifest V3), которое автоматически
@@ -226,23 +260,30 @@ class SeleniumManager:
 
     def setup_driver(self):
         chrome_options = uc.ChromeOptions()
+        user_agent = self._get_random_desktop_user_agent()
 
         if settings.HEADLESS:
             chrome_options.add_argument("--headless=new")
 
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument(f"--window-size={random.randint(1366, 1920)},{random.randint(768, 1080)}")
+        chrome_options.add_argument("--lang=ru-RU")
+        chrome_options.add_argument("--disable-notifications")
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_argument("--disable-infobars")
         chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
         chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
-            "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
-            "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
-        )
+        chrome_options.add_argument(f"--user-agent={user_agent}")
+        chrome_options.add_argument(f"--user-data-dir={settings.CHROME_PROFILE_DIR}")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_experimental_option("prefs", {
+            "intl.accept_languages": "ru-RU,ru,en-US,en",
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        })
 
         chrome_binary = self._find_chrome_binary()
 
@@ -280,7 +321,7 @@ class SeleniumManager:
             options=chrome_options,
             browser_executable_path=chrome_binary if chrome_binary else None
         )
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        self._apply_stealth_fixes(driver)
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
