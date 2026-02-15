@@ -6,7 +6,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium_stealth import stealth
 from config.settings import settings
 from typing import Optional
 import time
@@ -30,6 +29,19 @@ class SeleniumManager:
         self.wait: Optional[WebDriverWait] = None
         self.proxy: Optional[ProxyInfo] = None
         self._proxy_ext_dir: Optional[str] = None
+
+    @staticmethod
+    def _get_human_user_agent() -> str:
+        """Возвращает более реалистичный desktop User-Agent."""
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        ]
+        return random.choice(user_agents)
 
     def build_proxy_auth_extension_dir(self, username: str, password: str) -> str:
         """
@@ -233,16 +245,23 @@ class SeleniumManager:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
-        chrome_options.add_argument("--net-log-capture-mode=Everything")
+        chrome_options.add_argument("--lang=ru-RU,ru")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
-            "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
-            "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
-        )
+        chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_argument(f"--user-agent={self._get_human_user_agent()}")
+
+        prefs = {
+            "intl.accept_languages": "ru-RU,ru,en-US,en",
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
+
+        if settings.CHROME_PROFILE_DIR:
+            os.makedirs(settings.CHROME_PROFILE_DIR, exist_ok=True)
+            chrome_options.add_argument(f"--user-data-dir={settings.CHROME_PROFILE_DIR}")
 
         chrome_binary = self._find_chrome_binary()
 
@@ -280,7 +299,22 @@ class SeleniumManager:
             options=chrome_options,
             browser_executable_path=chrome_binary if chrome_binary else None
         )
+        driver.set_page_load_timeout(settings.PAGE_LOAD_TIMEOUT)
+        driver.set_script_timeout(settings.REQUEST_TIMEOUT)
+
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": """
+                    Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+                    Object.defineProperty(navigator, 'languages', {get: () => ['ru-RU', 'ru', 'en-US', 'en']});
+                    Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+                    Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+                """
+            },
+        )
+
         self.driver = driver
         self.wait = WebDriverWait(driver, 20)
 
@@ -314,108 +348,56 @@ class SeleniumManager:
 
         return None
 
-    def navigate_to_url(self, url: str) -> bool:
+    def navigate_to_url(self, url: str, retries: int = 2) -> bool:
         if not self.driver:
             logger.error("Driver not initialized")
             return False
 
-        try:
-            logger.info("Navigating to: %s", url)
-            self.driver.get(url)
-
-            # Минимальная задержка для API
-            time.sleep(random.uniform(3, 7))
-
+        for attempt in range(retries + 1):
             try:
-                title = self.driver.title
-            except Exception:
-                title = "<no title>"
+                logger.info("Navigating to: %s (attempt %s/%s)", url, attempt + 1, retries + 1)
+                self.driver.get(url)
 
-            try:
-                self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.5);")
-            except Exception as e:
-                logger.debug("Scroll JS failed: %s", e)
+                time.sleep(random.uniform(2.5, 5.0))
 
-            time.sleep(random.uniform(2, 4))
+                try:
+                    self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight * 0.35);")
+                    time.sleep(random.uniform(1.2, 2.8))
+                except Exception as e:
+                    logger.debug("Scroll JS failed: %s", e)
 
-            current_url = None
-            body_snippet = None
-
-            try:
                 current_url = self.driver.current_url
-                body_snippet = self.driver.execute_script(
-                    "return document.body.innerText.slice(0, 300);"
+                title = self.driver.title
+                body_snippet = self.driver.execute_script("return document.body.innerText.slice(0, 300);")
+
+                logger.debug(
+                    "After navigation: current_url=%s, title=%r, body_snippet_start=%r",
+                    current_url, title, body_snippet,
                 )
-            except Exception as e:
-                logger.debug("Error getting page debug info after navigation: %s", e)
 
-            logger.debug(
-                "After navigation: current_url=%s, title=%r, body_snippet_start=%r",
-                current_url, title, body_snippet
-            )
+                if self.is_blocked():
+                    logger.warning(
+                        "Detected anti-bot/blocked page. url=%s, title=%r, snippet=%r",
+                        current_url, title, body_snippet,
+                    )
+                    if attempt < retries:
+                        time.sleep(random.uniform(3.0, 5.5))
+                        continue
+                    return False
 
-            # Проверка блокировки
-            if self.is_blocked():
-                logger.warning(
-                    "Detected anti-bot/blocked page. url=%s, title=%r, snippet=%r",
-                    current_url, title, body_snippet
-                )
+                return True
+
+            except TimeoutException:
+                logger.error("Timeout while loading: %s", url)
+                if attempt < retries:
+                    continue
                 return False
-
-            # Старый быстрый кейс тоже можно оставить
-            if "Access denied" in (title or "") or "Cloudflare" in (title or ""):
-                logger.warning("Detected anti-bot protection by title")
+            except WebDriverException as e:
+                logger.error("WebDriver error: %s", e)
+                if attempt < retries:
+                    time.sleep(random.uniform(2.0, 4.0))
+                    continue
                 return False
-
-            return True
-
-        except TimeoutException:
-            logger.error(f"Timeout while loading: {url}")
-            return False
-        except WebDriverException as e:
-            logger.error(f"WebDriver error: {e}")
-            return False
-
-    def is_blocked(self) -> bool:
-        """
-        Check if we're blocked by anti-bot protection
-        """
-        if not self.driver:
-            return True
-
-        try:
-            # Common anti-bot indicators
-            blocked_indicators = [
-                "cloudflare",
-                "checking your browser",
-                "enable javascript",
-                "access denied",
-                "blocked",
-                "доступ ограничен",
-                "инцидент:",
-                "confirm that you're not a bot",  # Добавили для капчи
-                "slide the"  # Добавили для слайдер-капчи
-            ]
-
-            page_source = self.driver.page_source.lower()
-
-            for indicator in blocked_indicators:
-                if indicator in page_source:
-                    logger.warning("Anti-bot indicator detected: %r", indicator)
-
-                    # Если это капча, пытаемся решить
-                    if "slide the" in page_source or "confirm that you're not a bot" in page_source:
-                        logger.info("Attempting to solve captcha automatically...")
-                        if self.attempt_captcha_solution():
-                            logger.info("Captcha solved, continuing...")
-                            return False  # Не заблокирован, капча решена
-
-                    return True
-
-            return False
-
-        except Exception:
-            return True
 
     def load_cookies_from_file(self, cookies_path: str, domain: str):
         if not self.driver:
@@ -466,7 +448,6 @@ class SeleniumManager:
             logger.error(f"Failed to solve captcha: {e}")
             return False
 
-    # Обновите метод is_blocked для более точного определения
     def is_blocked(self) -> bool:
         """Check if we're blocked by anti-bot protection"""
         if not self.driver:
@@ -478,7 +459,7 @@ class SeleniumManager:
             title = self.driver.title.lower()
 
             # Быстрая проверка по URL и заголовку
-            if any(keyword in current_url for keyword in ['antibot', '__rr']) or \
+            if any(keyword in current_url for keyword in ['antibot', '__rr', '/sorry']) or \
                     'captcha' in title:
                 logger.warning(f"Blocked by captcha: URL={current_url}, title={title}")
                 return True
@@ -498,6 +479,10 @@ class SeleniumManager:
             for indicator in blocked_indicators:
                 if indicator in page_text:
                     logger.warning(f"Blocked indicator found: {indicator}")
+                    if indicator in {"confirm that you're not a bot", "slide the slider", "puzzle piece"}:
+                        logger.info("Captcha-like page detected, trying automatic solve")
+                        if self.attempt_captcha_solution():
+                            return False
                     return True
 
             return False
