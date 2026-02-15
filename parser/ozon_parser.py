@@ -2,6 +2,7 @@ import json
 import logging
 import time
 import concurrent.futures
+import random
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
@@ -228,6 +229,11 @@ class OzonWorker:
             article_start = time.time()
             result = self.parse_article_fast(article)
             results.append(result)
+
+            # Небольшой "человеческий" интервал между товарами.
+            # Снижает вероятность триггера антибота на серии быстрых запросов.
+            if i < len(articles):
+                time.sleep(random.uniform(0.8, 2.2))
             
             article_time = time.time() - article_start
             elapsed_total = time.time() - start_time

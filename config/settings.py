@@ -24,11 +24,11 @@ class Settings(BaseSettings):
     REQUEST_TIMEOUT: int = 30  # Уменьшено для скорости
     
     # Worker settings - динамическое распределение
-    MAX_ARTICLES_PER_WORKER: int = 30  # Увеличено
-    MAX_WORKERS: int = 5  # Увеличено до 7
+    MAX_ARTICLES_PER_WORKER: int = 20
+    MAX_WORKERS: int = 2  # Снижаем агрессивность, чтобы реже ловить антибот
     
     # Browser settings
-    USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
     # Proxy settings
     ENABLE_PROXY: bool = True
