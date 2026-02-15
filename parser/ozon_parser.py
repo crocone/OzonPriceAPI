@@ -52,9 +52,13 @@ class OzonParser:
         # Рассчитываем сколько воркеров нужно для укладывания в 1.5 минуты
         estimated_total_time = total_articles * self.ESTIMATED_TIME_PER_ARTICLE
         needed_workers = max(1, int(estimated_total_time / self.TARGET_TIME_SECONDS))
-        
+
+        # Антибот Ozon хуже переносит большой параллелизм с одного IP/подсети,
+        # поэтому ограничиваем реальный параллелизм более консервативно.
+        anti_bot_safe_workers = min(settings.MAX_WORKERS, 2)
+
         # Ограничиваем максимальным количеством воркеров
-        optimal_workers = min(needed_workers, self.MAX_WORKERS)
+        optimal_workers = min(needed_workers, anti_bot_safe_workers)
         
         # Убеждаемся что в каждом воркере минимум 3 артикула (кроме остатка)
         if total_articles / optimal_workers < self.MIN_ARTICLES_PER_WORKER:
@@ -149,6 +153,12 @@ class OzonWorker:
         try:
             self.driver = self.selenium_manager.setup_driver()
             logger.info(f"Worker {self.worker_id} initialized successfully")
+
+            # Единоразовый прогрев сессии на главной странице вместо прогрева на каждый артикул.
+            if self.selenium_manager.navigate_to_url(settings.OZON_BASE_URL):
+                time.sleep(2)
+            else:
+                logger.warning(f"Worker {self.worker_id}: initial session warmup failed")
         except Exception as e:
             logger.error(f"Failed to initialize worker {self.worker_id}: {e}")
             raise
@@ -246,53 +256,12 @@ class OzonWorker:
 
     def parse_article_fast(self, article: int) -> ArticleResult:
         """Быстрый парсинг с улучшенной обработкой капчи"""
-        for attempt in range(3):  # Увеличиваем до 3 попыток
+        # Не делаем прогрев перед каждым артикулом: это создает подозрительный паттерн
+        # и лишние переходы. Работаем через API-url и только при необходимости восстанавливаем сессию.
+        for attempt in range(3):
             try:
                 api_url = build_ozon_api_url(article)
 
-                # 0) Прогрев куков: сначала открываем обычную карточку товара
-                product_url = f"{settings.OZON_BASE_URL}"
-
-                navigation_success = self.selenium_manager.navigate_to_url(product_url)
-
-                if not navigation_success:
-                    # Проверяем, точно ли это капча
-                    time.sleep(2)  # Даем время для загрузки
-
-                    if self.is_captcha_present():
-                        logger.info(f"Captcha detected, attempting to solve...")
-                        if self.solve_captcha():
-                            logger.info("Captcha solved successfully")
-                            # После решения капчи продолжаем
-                            time.sleep(2)
-                            # Пробуем перейти снова
-                            navigation_success = self.selenium_manager.navigate_to_url(product_url)
-                            if not navigation_success:
-                                if attempt < 2:
-                                    continue
-                                return ArticleResult(article=article, success=False,
-                                                     error="Navigation failed after captcha")
-                        else:
-                            logger.warning("Failed to solve captcha")
-                            if attempt < 2:
-                                # Пробуем обновить страницу и повторить
-                                self.driver.refresh()
-                                time.sleep(3)
-                                continue
-                            return ArticleResult(article=article, success=False,
-                                                 error="Captcha solving failed")
-                    else:
-                        # Не капча, а другая ошибка
-                        self.handle_blocked_page(context=f"product_{article}_attempt_{attempt + 1}")
-                        if attempt < 2:
-                            time.sleep(1)
-                            continue
-                        return ArticleResult(article=article, success=False,
-                                             error="Navigation to product page failed")
-
-                time.sleep(2)  # даём озону поставить куки/сессию
-
-                # 1) Теперь идём в composer-api
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)
 
                 if not navigation_success:
