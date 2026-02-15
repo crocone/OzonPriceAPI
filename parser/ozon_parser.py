@@ -2,6 +2,7 @@ import json
 import logging
 import time
 import concurrent.futures
+import random
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
@@ -42,8 +43,18 @@ class OzonParser:
         
         # Рассчитываем оптимальное количество воркеров
         worker_groups = self._calculate_optimal_workers(articles)
+
+        # Safe mode: ограничиваем параллелизм, чтобы снизить антибот-риски
+        if settings.SAFE_MODE and len(worker_groups) > settings.SAFE_MODE_MAX_WORKERS:
+            logger.info(
+                "SAFE_MODE enabled: limiting workers from %s to %s",
+                len(worker_groups),
+                settings.SAFE_MODE_MAX_WORKERS,
+            )
+            worker_groups = [articles]
+
         logger.info(f"Using {len(worker_groups)} workers for {total_articles} articles")
-        
+
         return self._parse_with_multiple_workers(worker_groups, articles)
     
     def _calculate_optimal_workers(self, articles: List[int]) -> List[List[int]]:
@@ -124,6 +135,12 @@ class OzonParser:
     
     def _parse_worker_group(self, articles: List[int], worker_id: int) -> List[ArticleResult]:
         logger.info(f"Worker {worker_id} starting with {len(articles)} articles")
+
+        if settings.SAFE_MODE and worker_id > 1:
+            delay = settings.WORKER_START_DELAY_SECONDS * (worker_id - 1)
+            logger.info("Worker %s delayed by %ss (SAFE_MODE)", worker_id, delay)
+            time.sleep(delay)
+
         worker = OzonWorker(worker_id)
         try:
             worker.initialize()
@@ -238,6 +255,14 @@ class OzonWorker:
             logger.info(f"Worker {self.worker_id}: {i}/{len(articles)} articles, "
                        f"current: {article_time:.1f}s, avg: {avg_time:.1f}s, "
                        f"ETA: {estimated_remaining:.1f}s")
+
+            if settings.SAFE_MODE and i < len(articles):
+                pause = random.uniform(
+                    settings.ARTICLE_DELAY_MIN_SECONDS,
+                    settings.ARTICLE_DELAY_MAX_SECONDS,
+                )
+                logger.debug("Worker %s pause %.2fs between articles (SAFE_MODE)", self.worker_id, pause)
+                time.sleep(pause)
         
         total_time = time.time() - start_time
         logger.info(f"Worker {self.worker_id} completed {len(articles)} articles in {total_time:.1f}s")

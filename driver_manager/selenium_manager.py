@@ -233,16 +233,11 @@ class SeleniumManager:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--log-net-log=/tmp/chrome_netlog.json")
-        chrome_options.add_argument("--net-log-capture-mode=Everything")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
-            "YaBrowser/25.12.0.2002.10 YaApp_iOS/2512.0 "
-            "YaApp_iOS_Browser/2512.0 Safari/604.1 SA/3"
-        )
+        chrome_options.add_argument("--lang=ru-RU")
+        chrome_options.add_argument("--user-agent=" + settings.USER_AGENT)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option("useAutomationExtension", False)
 
         chrome_binary = self._find_chrome_binary()
 
@@ -282,8 +277,9 @@ class SeleniumManager:
         )
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self.driver = driver
-        self.wait = WebDriverWait(driver, 20)
-
+        self.driver.set_page_load_timeout(settings.PAGE_LOAD_TIMEOUT)
+        self.driver.implicitly_wait(settings.IMPLICIT_WAIT)
+        self.wait = WebDriverWait(driver, settings.IMPLICIT_WAIT)
 
         logger.info("Chrome driver created successfully")
 
@@ -324,7 +320,7 @@ class SeleniumManager:
             self.driver.get(url)
 
             # Минимальная задержка для API
-            time.sleep(random.uniform(3, 7))
+            time.sleep(random.uniform(2.2, 4.8))
 
             try:
                 title = self.driver.title
@@ -336,7 +332,7 @@ class SeleniumManager:
             except Exception as e:
                 logger.debug("Scroll JS failed: %s", e)
 
-            time.sleep(random.uniform(2, 4))
+            time.sleep(random.uniform(1.2, 2.8))
 
             current_url = None
             body_snippet = None
