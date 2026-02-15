@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Worker settings - динамическое распределение
     MAX_ARTICLES_PER_WORKER: int = 30  # Увеличено
     MAX_WORKERS: int = 5  # Увеличено до 7
+    SAFE_MODE: bool = True
+    SAFE_MODE_MAX_WORKERS: int = 1
+    WORKER_START_DELAY_SECONDS: int = 8
+    ARTICLE_DELAY_MIN_SECONDS: float = 1.5
+    ARTICLE_DELAY_MAX_SECONDS: float = 3.5
     
     # Browser settings
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
