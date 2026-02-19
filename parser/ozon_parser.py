@@ -1,18 +1,18 @@
 import json
 import logging
 import time
+import random
 import concurrent.futures
 from typing import List, Optional
 from driver_manager.selenium_manager import SeleniumManager
 from models.schemas import ArticleResult, PriceInfo, SellerInfo
 from utils.captcha_solver import OzonCaptchaSolverV3
 from utils.helpers import (
-    build_ozon_api_url, 
-    find_web_price_property, 
+    build_ozon_api_url,
+    find_web_price_property,
     find_product_title,
     find_seller_name,
-    parse_price_data,
-    is_valid_json_response
+    is_valid_json_response,
 )
 from config.settings import settings
 from selenium.webdriver.common.by import By
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class OzonParser:
     def __init__(self):
-        self.MAX_WORKERS = settings.MAX_WORKERS
+        self.MAX_WORKERS = max(1, min(settings.MAX_WORKERS, 2))
         self.MIN_ARTICLES_PER_WORKER = settings.MAX_ARTICLES_PER_WORKER
         self.TARGET_TIME_SECONDS = 90  # 1.5 минуты
         self.ESTIMATED_TIME_PER_ARTICLE = 6  # секунд на артикул
@@ -246,12 +246,12 @@ class OzonWorker:
 
     def parse_article_fast(self, article: int) -> ArticleResult:
         """Быстрый парсинг с улучшенной обработкой капчи"""
-        for attempt in range(3):  # Увеличиваем до 3 попыток
+        for attempt in range(3):
             try:
                 api_url = build_ozon_api_url(article)
 
-                # 0) Прогрев куков: сначала открываем обычную карточку товара
-                product_url = f"{settings.OZON_BASE_URL}"
+                # 0) Прогрев куков: открываем карточку конкретного товара
+                product_url = f"{settings.OZON_BASE_URL}/product/{article}/"
 
                 navigation_success = self.selenium_manager.navigate_to_url(product_url)
 
@@ -290,7 +290,7 @@ class OzonWorker:
                         return ArticleResult(article=article, success=False,
                                              error="Navigation to product page failed")
 
-                time.sleep(2)  # даём озону поставить куки/сессию
+                time.sleep(random.uniform(1.5, 3.5))
 
                 # 1) Теперь идём в composer-api
                 navigation_success = self.selenium_manager.navigate_to_url(api_url)
@@ -319,6 +319,7 @@ class OzonWorker:
                     else:
                         self.handle_blocked_page(context=f"api_{article}_attempt_{attempt + 1}")
                         if attempt < 2:
+                            time.sleep(random.uniform(2, 5))
                             continue
 
                 # 2) Ждем JSON
@@ -326,6 +327,7 @@ class OzonWorker:
 
                 if not json_content:
                     if attempt < 2:
+                        time.sleep(random.uniform(2, 4))
                         continue
                     return ArticleResult(article=article, success=False, error="No JSON response")
 
